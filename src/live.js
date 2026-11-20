@@ -18,6 +18,7 @@ export class Live {
     es.addEventListener('upsert', json((p) => this.on.upsert(p)));
     es.addEventListener('remove', json((d) => this.on.remove(d.id)));
     es.addEventListener('presence', json((d) => this.on.presence(d.id, d.online)));
+    es.addEventListener('hi', json((d) => this.on.hi?.(d)));
     es.onerror = () => this.setConnected(false);
   }
   // the server remembers which profile this device registered (by cookie, shared by every
@@ -39,9 +40,33 @@ export class Live {
     if (fresh) this.connect(); // reconnect so the server counts us as online
     return body.person;
   }
+  // only the character's look can change once registered
+  async saveLook(look) {
+    if (!this.cred) throw new Error('Register first.');
+    const res = await fetch('/api/look', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ look, ...this.cred }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Could not save. Is the server running?');
+    return body.person;
+  }
+  // "Say hi" to someone, and the hellos people have sent me
+  async sayHi(to) {
+    if (!this.cred) throw new Error('Register to say hi.');
+    const res = await fetch('/api/hi', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to, ...this.cred }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Could not say hi. Is the server running?');
+    return body;
+  }
+  // { hellos: who said hi to me, sent: who I have already said hi to }
+  async hellos(seen = false) {
+    if (!this.cred) return { hellos: [], sent: [] };
+    const res = await fetch('/api/hellos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ seen, ...this.cred }) });
+    return res.ok ? res.json() : { hellos: [], sent: [] };
+  }
+  // remove my profile for good; only forget my sign-in once the server has really removed it
   async leave() {
     if (!this.cred) return;
-    await fetch('/api/profile', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.cred) }).catch(() => {});
+    const res = await fetch('/api/profile', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.cred) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not remove your profile. Is the server running?');
     this.cred = null; storeCred(null); this.connect();
   }
   forget() { this.cred = null; storeCred(null); }

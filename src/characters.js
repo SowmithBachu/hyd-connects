@@ -46,7 +46,7 @@ const SLEEVE = { tee: 0.3, shirt: 1.0, hoodie: 1.04, kurta: 0.97 };
 export function specFromLook(look, id = '') {
   const h = hash(String(id) + JSON.stringify(look));
   const r = rng(h);
-  const body = look.body || (look.hair === 'bun' || look.hair === 'long' ? 'female' : 'male');
+  const body = look.body === 'female' || look.body === 'male' ? look.body : look.hair === 'bun' || look.hair === 'long' ? 'female' : 'male';
   const outfit = look.outfit === 'suit' ? 'shirt' : OUTFIT[look.outfit] != null ? look.outfit : 'tee';
   const build = look.build && typeof look.build === 'string' ? look.build : ['slim', 'average', 'average', 'broad', 'heavy'][(r() * 5) | 0];
   let sleeve = SLEEVE[outfit];
@@ -58,7 +58,7 @@ export function specFromLook(look, id = '') {
     skin: look.skin || '#c99067', hairColor: look.hairColor || '#2e2019',
     top: look.top || '#2f6fb5', trim: look.accent || '#ffb81c',
     bottom: outfit === 'kurta' ? (r() < 0.6 ? '#efe8d8' : look.bottom || '#efe8d8') : look.bottom || '#2d3a5c',
-    shoes: outfit === 'kurta' ? '#7a4b2a' : SHOES[(r() * SHOES.length) | 0],
+    shoes: look.shoes || (outfit === 'kurta' ? '#7a4b2a' : SHOES[(r() * SHOES.length) | 0]),
     seed: h,
   };
 }

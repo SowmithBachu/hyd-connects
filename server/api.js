@@ -13,7 +13,7 @@
 //    a LinkedIn or X profile can only belong to one person.
 import crypto from 'node:crypto';
 import { DISTRICTS } from '../src/geo.js';
-import { allPeople, getPerson, personOfDevice, linkDevice, savePerson, deletePerson, takenBy } from './db.js';
+import { allPeople, getPerson, personOfDevice, linkDevice, savePerson, deletePerson, takenBy, addHello, lastHello, hellosFor, markHellosSeen, hellosSentBy, logEvent } from './db.js';
 
 const AREAS = new Set(DISTRICTS.map((d) => d.id));
 const HAIR = new Set(['short', 'side', 'bun', 'long', 'curly', 'spiky', 'cap']);
@@ -21,6 +21,11 @@ const OUTFIT = new Set(['tee', 'hoodie', 'shirt', 'kurta', 'suit']);
 
 const clients = new Set();
 const online = new Map(); // person id -> open connections
+const streams = new Map(); // person id -> their open live streams (for messages meant only for them)
+function sendTo(id, event, data) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const c of streams.get(id) || []) c.write(msg);
+}
 
 const view = (p) => { const { token, ...rest } = p; return { ...rest, online: online.has(p.id) }; };
 const list = () => allPeople().map(view);
@@ -36,6 +41,7 @@ function clean(input) {
   const name = str(p.name, 48), role = str(p.role, 48);
   if (name.length < 2) throw new Error('Name must be at least 2 characters.');
   if (role.length < 2) throw new Error('Role must be at least 2 characters.');
+  if (str(p.company, 48).length < 2) throw new Error(p.student ? 'Add your college or university.' : 'Add your company.');
   if (!AREAS.has(p.area)) throw new Error('Pick a neighbourhood.');
   const link = str(p.link, 200);
   if (link && !/^https?:\/\/[^\s]+\.[^\s]+$/i.test(link)) throw new Error('Link must start with http:// or https://');
@@ -46,18 +52,24 @@ function clean(input) {
   check('linkedin', /^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/[^\s]+$/i, 'LinkedIn link should look like https://www.linkedin.com/in/your-name');
   check('x', /^https:\/\/(www\.)?(x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/?$/i, 'X link should look like https://x.com/yourhandle');
   check('site', /^https?:\/\/[^\s]+\.[^\s]+$/i, 'Website must start with https://');
-  const l = p.look && typeof p.look === 'object' ? p.look : {};
   return {
     name, role, student: !!p.student, company: str(p.company, 48), area: p.area,
     status: p.status === 'open' || p.status === 'hiring' ? p.status : null,
     bio: str(p.bio, 140),
     skills: (Array.isArray(p.skills) ? p.skills : []).map((s) => str(s, 24)).filter(Boolean).slice(0, 6),
     link, links,
-    look: {
-      top: hex(l.top, '#2aa6b8'), bottom: hex(l.bottom, '#2d3550'), skin: hex(l.skin, '#c08a5c'), hairColor: hex(l.hairColor, '#1c1717'),
-      hair: HAIR.has(l.hair) ? l.hair : 'short', glasses: !!l.glasses, headphones: !!l.headphones, backpack: !!l.backpack,
-      outfit: OUTFIT.has(l.outfit) ? l.outfit : 'tee', legs: l.legs === 'shorts' ? 'shorts' : 'pants', accent: hex(l.accent, '#ffb81c'), beard: !!l.beard, lanyard: !!l.lanyard,
-    },
+    look: cleanLook(p.look),
+  };
+}
+// the character's look: the only part of a profile that can change after registering
+function cleanLook(input) {
+  const l = input && typeof input === 'object' ? input : {};
+  return {
+    body: l.body === 'female' || l.body === 'male' ? l.body : undefined,
+    top: hex(l.top, '#2aa6b8'), bottom: hex(l.bottom, '#2d3550'), skin: hex(l.skin, '#c08a5c'), hairColor: hex(l.hairColor, '#1c1717'),
+    shoes: typeof l.shoes === 'string' && /^#[0-9a-f]{6}$/i.test(l.shoes) ? l.shoes : undefined,
+    hair: HAIR.has(l.hair) ? l.hair : 'short', glasses: !!l.glasses, headphones: !!l.headphones, backpack: !!l.backpack,
+    outfit: OUTFIT.has(l.outfit) ? l.outfit : 'tee', legs: l.legs === 'shorts' ? 'shorts' : 'pants', accent: hex(l.accent, '#ffb81c'), beard: !!l.beard, lanyard: !!l.lanyard,
   };
 }
 
@@ -112,19 +124,22 @@ export async function apiMiddleware(req, res, next) {
       res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ people: list() })}\n\n`);
       clients.add(res);
       const id = url.searchParams.get('id'), mine = owns(id, url.searchParams.get('token'));
-      if (mine) linkDevice(device, id); // profiles made before device cookies get linked here
+      if (mine) { linkDevice(device, id); logEvent('enter', id); } // (profiles made before device cookies get linked here)
       if (mine) {
+        if (!streams.has(id)) streams.set(id, new Set());
+        streams.get(id).add(res);
         online.set(id, (online.get(id) || 0) + 1);
         if (online.get(id) === 1) broadcast('presence', { id, online: true });
       }
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
-      req.on('close', () => {
+      req.on('close', () => { try {
         clearInterval(ping); clients.delete(res);
+        if (mine) { streams.get(id)?.delete(res); if (!streams.get(id)?.size) streams.delete(id); }
         if (mine && getPerson(id)) {
           const n = (online.get(id) || 1) - 1;
           if (n <= 0) { online.delete(id); broadcast('presence', { id, online: false }); } else online.set(id, n);
         }
-      });
+      } catch (e) { console.error('stream close:', e.message); } }); // a slip here must never take the server down
       return;
     }
 
@@ -139,13 +154,48 @@ export async function apiMiddleware(req, res, next) {
       if (clash) return send(res, 409, { error: `That ${clash} profile is already registered. If it is yours, open the city on the device you registered with.` });
       const person = savePerson({ id, token, ...profile, joinedAt: getPerson(id)?.joinedAt });
       linkDevice(device, id);
+      logEvent('register', id, null, { name: person.name, role: person.role, company: person.company });
       broadcast('upsert', view(person));
       return send(res, 200, { id, token, person: view(person) });
+    }
+
+    // "Say hi": tell someone you said hi; they get it live, and in their bell list later
+    if (req.method === 'POST' && url.pathname === '/api/hi') {
+      if (limited(req.socket.remoteAddress)) return send(res, 429, { error: 'Too many hellos. Try again in a minute.' });
+      const body = await readBody(req);
+      if (!owns(body.id, body.token)) return send(res, 403, { error: 'Register to say hi.' });
+      if (typeof body.to !== 'string' || body.to === body.id || !getPerson(body.to)) return send(res, 404, { error: 'That person is not on the map any more.' });
+      // once is enough: a hello to someone is remembered for good, so saying it again does nothing
+      const before = lastHello(body.id, body.to);
+      if (before) return send(res, 200, { ok: true, already: true, at: before });
+      const hi = { id: addHello(body.id, body.to), from: body.id, at: Date.now(), seen: false };
+      logEvent('hi', body.id, body.to);
+      sendTo(body.to, 'hi', hi);
+      return send(res, 200, { ok: true });
+    }
+    // my hellos (newest first), and marking them seen when I open the bell
+    if (url.pathname === '/api/hellos') {
+      const body = req.method === 'POST' ? await readBody(req) : { id: url.searchParams.get('id'), token: url.searchParams.get('token') };
+      if (!owns(body.id, body.token)) return send(res, 403, { error: 'Not yours.' });
+      if (req.method === 'POST' && body.seen) markHellosSeen(body.id);
+      return send(res, 200, { hellos: hellosFor(body.id), sent: hellosSentBy(body.id) });
+    }
+
+    // change my character's look (profile details stay as registered)
+    if (req.method === 'POST' && url.pathname === '/api/look') {
+      if (limited(req.socket.remoteAddress)) return send(res, 429, { error: 'Too many changes. Try again in a minute.' });
+      const body = await readBody(req);
+      if (!owns(body.id, body.token)) return send(res, 403, { error: 'Not your character.' });
+      const person = savePerson({ ...getPerson(body.id), look: cleanLook(body.look) });
+      logEvent('look', body.id);
+      broadcast('upsert', view(person));
+      return send(res, 200, { person: view(person) });
     }
 
     if (req.method === 'DELETE' && url.pathname === '/api/profile') {
       const { id, token } = await readBody(req);
       if (!owns(id, token)) return send(res, 403, { error: 'Not your profile.' });
+      logEvent('leave', id, null, { name: getPerson(id)?.name });
       deletePerson(id); online.delete(id);
       broadcast('remove', { id });
       return send(res, 200, { ok: true });

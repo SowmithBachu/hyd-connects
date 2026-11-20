@@ -7,7 +7,7 @@ import './style.css';
 import * as THREE from 'three';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
 import { gsap } from 'gsap';
-import { createIcons, createElement, Compass, MapPin, Search, Map as MapIcon, UserPlus, Menu, X, MousePointerClick, Sun, Moon, Radio, Footprints, Pencil, Sparkles, Info, Hand, Camera } from 'lucide';
+import { createIcons, createElement, Compass, MapPin, Search, Map as MapIcon, UserPlus, Menu, X, MousePointerClick, Sun, Moon, Radio, Footprints, Pencil, Sparkles, Info, Hand, Camera, Shirt, Bell } from 'lucide';
 import { buildWorld } from './city.js';
 import { Walkers, Metro, makeAvatar, lookFromSeed, seedOf, SKIN, HAIRCOL, TOPS, SUITS, KURTAS, BOTTOMS, ACCENTS, HAIRSTYLES, OUTFITS } from './cast.js';
 import { DISTRICTS, LAKES, PARKS, ROADS, METRO, LANDMARKS, HOOD, CITY, BOUNDS, districtById, nearestDistrict, nearestRoad, resolvePts, rng } from './geo.js';
@@ -16,7 +16,6 @@ import { CharacterCrowd, makeCharacterAvatar, loadCharacterLib } from './charact
 import { deviceTier, hasWebGL2 } from './device.js';
 import { createOnboarding, normaliseLinkedIn, normaliseX, normaliseSite } from './onboarding.js';
 import { createKites } from './features/kites.js';
-import { createWaypoint } from './features/waypoint.js';
 import { createPhoto } from './features/photo.js';
 import { loadSurfaces, surfaceUniforms, setSurfaceQuality } from './surfaces.js';
 import { Live } from './live.js';
@@ -31,7 +30,7 @@ const kbd = (k) => el('kbd', '', k);
 const icon = (node) => createElement(node);
 const xBtn = () => { const b = el('button', 'x'); b.setAttribute('aria-label', 'Close'); b.append(icon(X)); return b; };
 const slideIn = (node, from = 24) => gsap.fromTo(node, { x: from, opacity: 0 }, { x: 0, opacity: 1, duration: 0.38, ease: 'power3.out', clearProps: 'transform' });
-createIcons({ icons: { Compass, MapPin, Search, Map: MapIcon, UserPlus, Menu, X, MousePointerClick, Footprints, Hand, Camera } });
+createIcons({ icons: { Compass, MapPin, Search, Map: MapIcon, UserPlus, Menu, X, MousePointerClick, Footprints, Hand, Camera, Shirt, Bell } });
 
 // ---------------------------------------------------------------- renderer
 const canvas = $('#c');
@@ -195,10 +194,12 @@ const live = new Live({
     if (live.cred && !ids.has(live.cred.id) && me) { me = null; refreshMe(); }
     for (const p of list) upsert(p, false);
     afterPeopleChange();
+    loadHellos();
   },
   upsert(p) { upsert(p, true); afterPeopleChange(); },
-  remove(id) { removeActor(id); afterPeopleChange(); },
+  remove(id) { removeActor(id); afterPeopleChange(); if (hellos.some((h) => h.from === id)) { hellos = hellos.filter((h) => h.from !== id); paintBell(); } }, // their hellos left with them
   presence(id, on) { const a = actors.get(id); if (a) { a.p.online = on; paintLabel(a); afterPeopleChange(); } },
+  hi(h) { gotHi(h); },
   status: () => renderStatus(),
 });
 
@@ -265,7 +266,7 @@ function removeActor(id) {
 const everyone = () => [...actors.values()].map((a) => a.p);
 function afterPeopleChange() {
   const ps = everyone(), on = ps.filter((p) => p.live && p.online).length + (me ? 1 : 0);
-  $('#online span').textContent = `${on} online`; $('#online').title = `${ps.length + (me ? 1 : 0)} people on the map`;
+  // (the online count chip was removed from the top bar)
   if (!$('#find').hidden) renderFind(false);
 }
 function toast(p) {
@@ -317,12 +318,13 @@ function renderStatus() {
   if (live.connected) everConnected = true;
   // (the top status strip was removed; the dock button says what L does)
   const dj = document.querySelector('#dock [data-act="join"] span'); if (dj) dj.textContent = me ? 'Profile' : 'Register';
+  const dc = document.querySelector('#dock [data-act="char"]'); if (dc) dc.hidden = !me; // only registered people have a character to edit
+  if (typeof paintBell === 'function') { if (me && !hellos.length) loadHellos(); else paintBell(); }
 }
 
 // ------------------------------------------------------------ movement
 // ------------------------------------------------------------ new features
 const kites = createKites(scene, { R: rng(4242), count: device.lite ? 20 : 56, half: 165 });
-const guide = createWaypoint(scene, camera, { onArrive: (n) => notify(`You found ${n}. Say hi with E`) });
 
 const startD = districtById[me?.area || 'cyber'];
 const state = { x: startD.x - 6, z: startD.z + 7, yaw: Math.PI * 0.8, walk: 0, gy: 0.31, move: 0, vx: 0, vz: 0 };
@@ -367,34 +369,40 @@ function openCard(p) {
   if (p.sample) tags.append(el('span', 'pill sample', 'Sample profile'));
   inn.append(close, top, tags);
   if (!me) {
-    // guests can see who someone is; their profile, links and the guide need registering
+    // guests can see who someone is; their profile, links and saying hi need registering
     const lock = el('div', 'lock');
-    lock.append(el('b', '', `Register to connect with ${p.name.split(' ')[0]}`), el('span', '', 'See their full profile and links, and get guided to them. It takes about a minute.'));
+    lock.append(el('b', '', `Register to connect with ${p.name.split(' ')[0]}`), el('span', '', 'See their full profile and links, and say hi. It takes about a minute.'));
     const reg = el('button', 'btn primary', 'Register'); reg.onclick = () => { pendingCard = p.id; closeCard(); join(); };
     const acts = el('div', 'acts'); acts.append(reg); inn.append(lock, acts);
-    card.replaceChildren(inn); if (card.hidden) { card.hidden = false; slideIn(card, -24); } $('#hint').hidden = true;
+    card.replaceChildren(inn); if (card.hidden) { card.hidden = false; slideIn(card, -24); } $('#hint').hidden = true; document.body.classList.add('card-open');
     for (const a of actors.values()) if (a.sel !== (a.p.id === openId)) { a.sel = a.p.id === openId; paintLabel(a); }
     return;
   }
   if (p.bio) inn.append(el('p', 'bio', p.bio));
   if (p.skills?.length) { const sk = el('div', 'skills'); p.skills.forEach((s) => sk.append(el('span', '', s))); inn.append(sk); }
   const acts = el('div', 'acts');
-  const gm = el('button', 'btn primary', 'Guide me');
-  gm.onclick = () => {
-    guide.set(p.name, () => { const a = actors.get(p.id); return a && { x: a.x, z: a.z, y: a.gy || 0 }; });
-    closeCard(); notify(`Follow the light to ${p.name.split(' ')[0]} (G to cancel)`);
-  };
-  const go = el('button', 'btn', 'Jump there'); go.onclick = () => { guide.clear(); visit(p); };
-  acts.append(gm, go);
+  // "Say hi": the other person is told, live and in their bell list
+  let hiBtn = null;
+  if (p.live && me && p.id !== me.id) {
+    const said = sentHi.get(p.id);
+    hiBtn = el('button', 'btn primary hi', said ? 'Hi sent ✓' : 'Say hi 👋');
+    if (said) { hiBtn.disabled = true; hiBtn.title = `You said hi ${ago(said)}`; }
+    hiBtn.onclick = async () => {
+      hiBtn.disabled = true;
+      try { const r = await live.sayHi(p.id); sentHi.set(p.id, r.at || Date.now()); hiBtn.textContent = 'Hi sent ✓'; if (!r.already) notify(`You said hi to ${p.name.split(' ')[0]}`); }
+      catch (e) { hiBtn.disabled = false; notify(e.message); }
+    };
+  }
+  if (hiBtn) acts.append(hiBtn);
   const NAMES = { linkedin: 'LinkedIn', x: 'X', site: 'Website' };
   const links = Object.entries(p.links || {}).filter(([, v]) => v).map(([k, v]) => [NAMES[k] || k, v]);
   if (!links.length && p.link) links.push(['Open link', p.link]);
   for (const [label, url] of links) if (/^https?:\/\//i.test(url)) { const a = el('a', 'btn', label); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.append(a); }
   inn.append(acts);
-  card.replaceChildren(inn); if (card.hidden) { card.hidden = false; slideIn(card, -24); } $('#hint').hidden = true;
+  card.replaceChildren(inn); if (card.hidden) { card.hidden = false; slideIn(card, -24); } $('#hint').hidden = true; document.body.classList.add('card-open');
   for (const a of actors.values()) if (a.sel !== (a.p.id === openId)) { a.sel = a.p.id === openId; paintLabel(a); }
 }
-function closeCard() { card.hidden = true; $('#hint').hidden = false; openId = null; for (const a of actors.values()) if (a.sel) { a.sel = false; paintLabel(a); } }
+function closeCard() { card.hidden = true; $('#hint').hidden = false; document.body.classList.remove('card-open'); openId = null; for (const a of actors.values()) if (a.sel) { a.sel = false; paintLabel(a); } }
 function visit(p) {
   const a = actors.get(p.id); if (!a) return;
   const pl = world.plazas[p.area] || world.plazas.cyber;
@@ -477,11 +485,97 @@ function openMine() {
   const NAMES = { linkedin: 'LinkedIn', x: 'X', site: 'Website' };
   const links = Object.entries(p.links || {}).filter(([, v]) => /^https?:\/\//i.test(v || ''));
   if (links.length) { const acts = el('div', 'acts'); for (const [k, url] of links) { const a = el('a', 'btn', NAMES[k] || k); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.append(a); } box.append(acts); }
-  box.append(el('p', 'fine', 'Your profile was set when you registered, so people can trust it is really you.'));
+  const ed = el('button', 'btn primary', 'Edit character'); ed.onclick = editChar;
+  const edRow = el('div', 'acts'); edRow.append(ed); box.append(edRow);
+  box.append(el('p', 'fine', 'Your details were set when you registered, so people can trust them. Your character can change any time.'));
+  // removing my profile: asks once, then takes everything about me off the map
+  const rm = el('button', 'rm', 'Remove my profile');
+  rm.onclick = () => {
+    const sure = el('div', 'sure');
+    sure.append(el('b', '', 'Remove your profile for good?'), el('span', '', 'Your profile, your character and your hellos leave the city and are deleted. You can register again afterwards.'));
+    const err = el('span', 'err');
+    const no = el('button', 'btn', 'Keep it'), yes = el('button', 'btn danger', 'Remove for good');
+    no.onclick = () => sure.replaceWith(rm);
+    yes.onclick = async () => {
+      yes.disabled = no.disabled = true; err.textContent = '';
+      try {
+        await live.leave();
+        me = null; hellos = []; sentHi.clear(); closeMine(); closeBell(); refreshMe();
+        gate.show(-1); notify('Your profile has been removed');
+      } catch (e) { err.textContent = e.message; yes.disabled = no.disabled = false; }
+    };
+    const row = el('div', 'acts'); row.append(no, yes); sure.append(row, err);
+    rm.replaceWith(sure);
+  };
+  box.append(rm);
   mine.replaceChildren(box); mine.hidden = false;
   gsap.fromTo(box, { y: 16, opacity: 0, scale: 0.98 }, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: 'power2.out' });
 }
 function closeMine() { mine.hidden = true; }
+
+// ---------------------------------------------------------- "say hi" and the bell
+// Who said hi to me: a bell by the clock with a count of new ones, and a list that
+// opens their card (and lets me say hi back).
+let hellos = [];
+const sentHi = new Map(); // who I have already said hi to (from the database) -> when
+const refreshOpenCard = () => { const p = openId && actors.get(openId)?.p; if (p) openCard(p); };
+const bellBtn = $('#bell'), bellBadge = bellBtn.querySelector('.badge');
+const bellPanel = el('div', 'glass'); bellPanel.id = 'bellPanel'; bellPanel.hidden = true; document.body.append(bellPanel);
+const personById = (id) => actors.get(id)?.p || null;
+const ago = (t) => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`; };
+function paintBell() {
+  bellBtn.hidden = !me;
+  const n = hellos.filter((h) => !h.seen).length;
+  bellBadge.hidden = !n; bellBadge.textContent = n > 9 ? '9+' : String(n);
+  bellBtn.classList.toggle('new', n > 0);
+  if (!bellPanel.hidden) renderBell();
+}
+async function loadHellos() {
+  if (!me) { hellos = []; sentHi.clear(); paintBell(); return; }
+  const r = await live.hellos().catch(() => ({ hellos: [], sent: [] }));
+  hellos = r.hellos || []; sentHi.clear(); for (const s of r.sent || []) sentHi.set(s.to, s.at);
+  paintBell(); refreshOpenCard();
+}
+function gotHi(h) {
+  if (hellos.some((x) => x.id === h.id)) return;
+  hellos.unshift(h); paintBell();
+  const p = personById(h.from);
+  notify(`${p ? p.name : 'Someone'} said hi to you 👋`);
+  gsap.fromTo(bellBtn, { rotate: -18 }, { rotate: 0, duration: 0.8, ease: 'elastic.out(1.2, 0.3)' });
+}
+function renderBell() {
+  const head = el('div', 'bh'); head.append(el('b', '', 'Who said hi'), el('span', '', hellos.length ? `${hellos.length}` : ''));
+  const list = el('div', 'bl');
+  for (const h of hellos) {
+    const p = personById(h.from), row = el('div', 'bi' + (h.seen ? '' : ' new'));
+    if (!p) { row.append(el('span', 'gone', 'Someone who has left the map said hi'), el('small', '', ago(h.at))); list.append(row); continue; }
+    const txt = el('div', 'bt'); const who = el('div'); who.append(el('b', '', p.name), document.createTextNode(' said hi to you'));
+    txt.append(who, el('small', '', [p.role, p.company].filter(Boolean).join(' · ') + ' · ' + ago(h.at)));
+    const open = el('button', 'bo'); open.append(avatarDot(p), txt); open.onclick = () => { closeBell(); openCard(p); };
+    const back = el('button', 'btn sm', sentHi.has(p.id) ? 'Hi sent ✓' : 'Say hi back');
+    back.disabled = sentHi.has(p.id);
+    back.onclick = async () => { back.disabled = true; try { const r = await live.sayHi(p.id); sentHi.set(p.id, r.at || Date.now()); back.textContent = 'Hi sent ✓'; } catch (e) { back.disabled = false; notify(e.message); } };
+    row.append(open, back); list.append(row);
+  }
+  if (!hellos.length) list.append(el('p', 'none', 'No one has said hi yet. Walk up to someone, press E and say hi.'));
+  bellPanel.replaceChildren(head, list);
+}
+function openBell() {
+  closeCard(); closeMine(); unlock();
+  renderBell(); bellPanel.hidden = false; document.body.classList.add('bell-open'); slideIn(bellPanel, -12);
+  // opening the list marks them seen (the dots stay until it is closed)
+  if (hellos.some((h) => !h.seen)) live.hellos(true).then(() => { hellos.forEach((h) => { h.seen = true; }); bellBadge.hidden = true; bellBtn.classList.remove('new'); }).catch(() => {});
+}
+function closeBell() { bellPanel.hidden = true; document.body.classList.remove('bell-open'); }
+bellBtn.onclick = (e) => { e.stopPropagation(); if (bellPanel.hidden) openBell(); else closeBell(); };
+document.addEventListener('pointerdown', (e) => { if (!bellPanel.hidden && !bellPanel.contains(e.target) && !bellBtn.contains(e.target)) closeBell(); });
+// change my character's look (any time; the rest of my profile stays as registered)
+function editChar() {
+  if (!me) return join();
+  closeCard(); closeMine(); find.hidden = true; unlock();
+  if (photo.on) photo.toggle(false);
+  gate.editLook(me.look || {});
+}
 
 // ------------------------------------------------- radar minimap + 3D city map
 const mini = $('#mini'), mapC = $('#map'), mctx = mapC.getContext('2d');
@@ -587,6 +681,7 @@ function renderPause() {
   L.append(el('small', 'd', `${CITY} · ${HOOD}`), el('h1', 'd', 'Paused'));
   const item = (label, k, fn, primary) => { const b = el('button', 'pzItem d' + (primary ? ' on' : '')); b.append(el('span', '', label), kbd(k)); b.onclick = fn; L.append(b); };
   item('Resume', 'Esc', () => setPause(false), true);
+  if (me) item('Edit character', 'C', () => { setPause(false); editChar(); });
   const live2 = el('div', 'pzLive'); const ps = everyone(); live2.append(el('i', 'dot live'), document.createTextNode(`${ps.filter((p) => p.live && p.online).length + (me ? 1 : 0)} online · ${ps.length + (me ? 1 : 0)} ${ps.length + (me ? 1 : 0) === 1 ? 'person' : 'people'} on the map`));
   L.append(live2);
 
@@ -595,8 +690,8 @@ function renderPause() {
   // only controls that work on this device: touch gestures on phones and tablets, keys on computers
   const touch = matchMedia('(pointer: coarse)').matches;
   const rows = touch
-    ? [['Joystick', 'Walk (push further to run)'], ['Drag', 'Look around'], ['Pinch', 'Camera closer / further'], ['Say hi', 'Tap it near someone to meet them'], ['Photo', 'Photo mode']]
-    : [['W A S D', 'Walk (or the arrow keys)'], ['Shift', 'Run'], ['Click', 'Look around (Esc to free the mouse)'], ['Wheel', 'Camera closer / further'], ['E', 'Meet someone nearby'], ['P', 'Photo mode (Space to shoot)'], ['L', me ? 'Your profile' : 'Register'], ['Esc', 'Pause']];
+    ? [['Joystick', 'Walk (push further to run)'], ['Drag', 'Look around'], ['Pinch', 'Camera closer / further'], ['Say hi', 'Tap it near someone to meet them'], ...(me ? [['Character', 'Edit your character']] : []), ['Photo', 'Photo mode']]
+    : [['W A S D', 'Walk (or the arrow keys)'], ['Shift', 'Run'], ['Click', 'Look around (Esc to free the mouse)'], ['Wheel', 'Camera closer / further'], ['E', 'Meet someone nearby'], ['P', 'Photo mode (Space to shoot)'], ['L', me ? 'Your profile' : 'Register'], ...(me ? [['C', 'Edit your character']] : []), ['Esc', 'Pause']];
   for (const [k, what] of rows) { const r = el('div'); r.append(kbd(k), el('span', '', what)); ctl.append(r); }
   Rt.append(ctl);
   box.append(L, Rt);
@@ -615,16 +710,16 @@ let near = null;
 window.addEventListener('keydown', (e) => {
   if (gate?.open) return;
   if (e.key === 'Escape' && photo.on) { photo.toggle(false); return; }
-  if (e.key === 'Escape') { if (paused) setPause(false); else if (!mine.hidden) closeMine(); else if (mapMode) setMap(false); else if (!card.hidden) closeCard(); else if (!find.hidden) find.hidden = true; else setPause(true); return; }
+  if (e.key === 'Escape') { if (paused) setPause(false); else if (!bellPanel.hidden) closeBell(); else if (!mine.hidden) closeMine(); else if (mapMode) setMap(false); else if (!card.hidden) closeCard(); else if (!find.hidden) find.hidden = true; else setPause(true); return; }
   if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName || '') || paused || !mine.hidden) return;
   if (mapMode) return;
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === 'e' && near) openCard(near.p);
   if (k === 'l') join();
+  if (k === 'c') editChar();
   if (k === 'p') photo.toggle();
   if (k === ' ' && photo.on) photo.shoot();
-  if (k === 'g' && guide.active) { guide.clear(); notify('Guide cleared'); }
   if (k.startsWith('arrow') || k === ' ') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -632,7 +727,7 @@ window.addEventListener('blur', () => keys.clear());
 $('#prompt').onclick = () => near && openCard(near.p);
 $('#dock').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  ({ join: () => join(), menu: () => setPause(true), photo: () => photo.toggle() })[b.dataset.act]?.();
+  ({ join: () => join(), char: () => editChar(), menu: () => setPause(true), photo: () => photo.toggle() })[b.dataset.act]?.();
 });
 
 const ptrs = new Map();
@@ -825,7 +920,6 @@ function frame(now) {
   }
   scene.fog.near = mapMode ? 520 : 70 + dist * 1.6; scene.fog.far = mapMode ? 1300 : 420 + dist * 3;
   kites.update(dt, t, night, 0);
-  guide.update(dt, t, state, W, H);
   sky.position.copy(camera.position); stars.position.copy(camera.position);
   fill.position.set(state.x * 0.6 + camera.position.x * 0.4, 5.5, state.z * 0.6 + camera.position.z * 0.4);
   clouds.position.x = ((t * 3) % 400) - 200;
@@ -940,8 +1034,11 @@ const cityReady = (async () => {
 })();
 
 // landing page and registration. Anyone can walk in as a guest; meeting people
-// (profiles, links, the guide) needs registering, which guests can do from inside.
-const showHud = () => gsap.from(['#area', '#topRight > *', '#dock', '#mini'], { y: -16, opacity: 0, duration: 0.6, stagger: 0.07, delay: 0.1, ease: 'power3.out', clearProps: 'all' });
+// (profiles, links, saying hi) needs registering, which guests can do from inside.
+// the "click to look around" hint shows for three seconds after arriving, then leaves
+let hintTimer = 0;
+const hintFor3s = () => { document.body.classList.remove('hint-done'); clearTimeout(hintTimer); hintTimer = setTimeout(() => document.body.classList.add('hint-done'), 3000); };
+const showHud = () => { hintFor3s(); gsap.from(['#area', '#topRight > *', '#dock', '#mini'], { y: -16, opacity: 0, duration: 0.6, stagger: 0.07, delay: 0.1, ease: 'power3.out', clearProps: 'all' }); };
 // arrive facing the plaza, with nothing (a wall, a lamp post, a tree) between the camera and me
 function standAt(area) {
   const pl = world.plazas[area]; if (!pl) return;
@@ -974,7 +1071,13 @@ function join() {
   gate.show(0, { inCity: true });
 }
 gate = createOnboarding({
-  archetypes: ARCH, lookFor, skins: SKIN, districts: DISTRICTS, statusColors: { open: STATUS.open.color, hiring: STATUS.hiring.color },
+  archetypes: ARCH, lookFor, skins: SKIN, looks: {
+    // only styles the character models really draw differently, per body
+    hairs: { female: [['long', 'Long'], ['side', 'Parted'], ['bun', 'Buns'], ['short', 'Short']], male: [['short', 'Parted'], ['curly', 'Buzzed'], ['long', 'Long']] },
+    outfits: [['tee', 'T-shirt'], ['hoodie', 'Hoodie'], ['shirt', 'Shirt'], ['kurta', 'Kurta']],
+    hairColors: HAIRCOL, tops: TOPS.filter((c) => c !== '#8a5bd1'), bottoms: BOTTOMS,
+    shoes: ['#f4f1ea', '#2b2b30', '#7a4b2a', '#3a5a8a', '#c94f3d', '#e8891a', '#1fa971', '#d9488f'],
+  }, districts: DISTRICTS, statusColors: { open: STATUS.open.color, hiring: STATUS.hiring.color },
   getMe: () => me,
   save: async (profile, arche) => {
     registering = profile.name;
@@ -986,6 +1089,8 @@ gate = createOnboarding({
   },
   onEnter: enterCity,
   onExplore: explore,
+  // my character's look is the one thing that can change after registering
+  onSaveLook: async (look) => { const p = await live.saveLook(look); me = { ...me, ...p }; refreshMe(); notify('Your character is updated'); },
   ready: cityReady,
 });
 // (dev only: /?enter skips the landing page for quick testing)
@@ -994,4 +1099,4 @@ const unboot = () => { document.documentElement.classList.remove('boot'); $('#lo
 if (!(import.meta.env.DEV && location.search.includes('enter'))) { gate.show(-1); unboot(); }
 else cityReady.then(unboot);
 if (import.meta.env.DEV) import('./dev/perf.js').then(({ installPerf }) => installPerf({ renderer, scene, sun, frame }));
-if (import.meta.env.DEV) window.__dc = { state, cam, world, flyTo, camera, scene, actors, walkers, crowd, post, sun, QUALITY, device, applyTime, setAutoQ: (v) => { autoQ = v; }, get fps() { return Math.round(1000 / ema); }, renderer }; // dev-only debug handle
+if (import.meta.env.DEV) window.__dc = { get gate() { return gate; }, state, cam, world, flyTo, camera, scene, actors, walkers, crowd, post, sun, QUALITY, device, applyTime, setAutoQ: (v) => { autoQ = v; }, get fps() { return Math.round(1000 / ema); }, renderer }; // dev-only debug handle
