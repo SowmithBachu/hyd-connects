@@ -1,4 +1,4 @@
-// Live profiles for Hyderabad Connect.
+// Live profiles for Hyderabad Connects.
 //
 // Stores each signed-in visitor's public profile and pushes changes to every open
 // browser over Server-Sent Events. Only profile data and online presence are

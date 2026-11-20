@@ -11,7 +11,7 @@
 // so entering is instant. Progress is kept as a draft in this browser.
 import { createCharacterPreview, createThumbs } from './features/charpreview.js';
 
-const DRAFT_KEY = 'deccan-commons.draft';
+const DRAFT_KEY = 'hyderabad-connects.draft';
 const STEPS = ['Who you are', 'What you do', 'Your links', 'Edit your character'];
 
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -79,7 +79,7 @@ export function createOnboarding({ archetypes, lookFor, skins, looks, districts,
   function landing() {
     const me = getMe();
     const box = h('div', 'land');
-    const hero = h('h1', 'hero'); hero.append(h('span', 'w1', 'Hyderabad'), h('em', 'w2', 'Connect'));
+    const hero = h('h1', 'hero'); hero.append(h('span', 'w1', 'Hyderabad'), h('em', 'w2', 'Connects'));
     const words = h('div', 'words');
     ['Walk', 'Meet', 'Find'].forEach((w, i) => { if (i) words.append(h('i', 'dot')); words.append(h('b', '', w)); });
     const tag = h('p', 'tag', 'Meet, greet and find the one: your next co-founder, hire or team.');

@@ -36,7 +36,7 @@ createIcons({ icons: { Compass, MapPin, Search, Map: MapIcon, UserPlus, Menu, X,
 const canvas = $('#c');
 if (!hasWebGL2()) {
   // say so plainly instead of showing a blank page
-  $('#loading').innerHTML = '<div class="mark"></div><b>Hyderabad Connect</b><span>This browser cannot show the 3D city (it needs WebGL 2).<br>Please open it in a recent Chrome, Edge, Firefox or Safari, and check that hardware acceleration is on.</span>';
+  $('#loading').innerHTML = '<img class="mark" src="/favicon.svg" alt=""><b>Hyderabad Connects</b><span>This browser cannot show the 3D city (it needs WebGL 2).<br>Please open it in a recent Chrome, Edge, Firefox or Safari, and check that hardware acceleration is on.</span>';
   throw new Error('WebGL 2 is not available');
 }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -67,7 +67,6 @@ scene.add(fill);
 let gate = null; // landing page + registration (set up at boot, below)
 let cityWarm = false; // textures, characters and shaders are ready
 let photo = null; // set up once the menus exist (below)
-try { localStorage.removeItem('deccan-commons.quality'); localStorage.removeItem('deccan-commons.look'); } catch { /* private mode */ } // old manual settings
 const post = createPost(renderer, scene, camera, sun, device.lite ? 'low' : 'high');
 post.onLevel = (l) => setSurfaceQuality(l === 'low');
 setSurfaceQuality(post.level === 'low');

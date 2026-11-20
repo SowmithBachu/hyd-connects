@@ -1,4 +1,4 @@
-/* Hyderabad Connect — "Pearl & Saffron" interface.
+/* Hyderabad Connects — "Pearl & Saffron" interface.
    Deep teal glass, pearl text, saffron accents, Rajdhani headings. */
 :root {
   --night: #0b1a22; --night2: #12262f; --glass: rgba(10, 26, 34, 0.72); --glass2: rgba(16, 36, 46, 0.86);
@@ -216,10 +216,6 @@ body.mapping #hud, body.mapping #dock, body.mapping #mini, body.mapping #hint, b
 #loading b { font: 700 34px/1 var(--head); letter-spacing: 0.08em; text-transform: uppercase; }
 #loading span { color: var(--muted); }
 @keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
-.mark { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--saffron), var(--teal)); position: relative; display: inline-block; flex: none; }
-.mark::after { content: ''; position: absolute; inset: 7px 6px 5px; background: linear-gradient(90deg, var(--night) 0 3px, transparent 3px 5px, var(--night) 5px 9px, transparent 9px 11px, var(--night) 11px 14px); border-radius: 2px 2px 0 0; }
-.mark.big { width: 68px; height: 68px; border-radius: 20px; }
-.mark.big::after { inset: 18px 15px 14px; background: linear-gradient(90deg, var(--night) 0 8px, transparent 8px 14px, var(--night) 14px 24px, transparent 24px 30px, var(--night) 30px 38px); }
 
 /* pause */
 #pause { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: radial-gradient(ellipse at 30% 40%, rgba(11, 26, 34, 0.45), rgba(5, 12, 18, 0.85)); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }

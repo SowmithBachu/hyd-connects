@@ -43,7 +43,7 @@ export function createPhoto({ post, notify, onToggle }) {
         if (!blob) { notify('Could not save the photo'); return; }
         const d = new Date(), stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
         const url = URL.createObjectURL(blob), a = document.createElement('a');
-        a.href = url; a.download = `hyderabad-connect-${stamp}.png`; document.body.append(a); a.click(); a.remove();
+        a.href = url; a.download = `hyderabad-connects-${stamp}.png`; document.body.append(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
         notify('Photo saved to your downloads');
       });

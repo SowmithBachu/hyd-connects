@@ -1,4 +1,4 @@
-# Hyderabad Connect
+# Hyderabad Connects
 
 A walkable, stylised 3D slice of Madhapur & HITEC City, Hyderabad, where people
 stand in their own block with an "Open to work" or "Hiring" tag. Seven blocks:
@@ -120,3 +120,30 @@ and `node tools/characters/build.mjs` rebuild `public/characters/`.
   Noir, Film) and press Space to save a PNG.
 - **Kites and lanterns**: Sankranti kites over the rooftops by day, glowing sky
   lanterns after dark.
+
+## Performance budget
+
+Measured on an Intel Iris Xe laptop GPU, 1280x720 at device pixel ratio 1.25, Chrome or
+Edge, with `await __perf.measure(40)` in the dev-server console (`src/dev/perf.js`).
+
+| What | Budget |
+| --- | --- |
+| Frame time at the automatic quality | CPU <= 14 ms, GPU <= 16 ms (55 fps or more) |
+| Low-power quality | 30 fps or more on integrated GPUs |
+| Draw calls per frame | <= 230 |
+| Triangles per frame | <= 1.5 M |
+| Texture memory | <= 96 MB |
+| Shadow map and post-processing buffers | <= 64 MB |
+| Character near detail level | under 5k triangles, <= 40 character draw calls |
+| Download for textures and environment | <= 6 MB |
+
+## Credits
+
+Every third-party asset is CC0 (public domain):
+
+- Characters: Quaternius, Universal Base Characters and Universal Animation Library,
+  Standard editions (quaternius.com). Built by `tools/characters/`.
+- Surface textures: ambientCG (ambientcg.com), 1K: Plaster001, Concrete034, Bricks105,
+  Asphalt031, PavingStones150, CorrugatedSteel005, Bark001, LeafSet024, ManholeCover007.
+  Packed by `tools/textures/`.
+- Sky lighting: Poly Haven, "Venice Sunset" by Greg Zaal, 1k HDR (polyhaven.com).

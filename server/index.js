@@ -18,4 +18,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': file.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache' });
     fs.createReadStream(file).pipe(res);
   });
-}).listen(PORT, () => console.log(`Hyderabad Connect on http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`Hyderabad Connects on http://localhost:${PORT}`));

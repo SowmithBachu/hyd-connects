@@ -1,6 +1,6 @@
 // Client side of the live layer: profiles and online presence, pushed over SSE.
 // Positions are never sent; each browser places people in their neighbourhood itself.
-const CRED_KEY = 'deccan-commons.me';
+const CRED_KEY = 'hyderabad-connects.me';
 
 export function loadCred() {
   try { const c = JSON.parse(localStorage.getItem(CRED_KEY)); return c && c.id && c.token ? c : null; } catch { return null; }

@@ -5,7 +5,7 @@ import { apiMiddleware } from './server/api.js';
 // runs the whole app from one command.
 export default defineConfig({
   plugins: [{
-    name: 'hyderabad-connect-api',
+    name: 'hyderabad-connects-api',
     configureServer(server) { server.middlewares.use(apiMiddleware); },
     configurePreviewServer(server) { server.middlewares.use(apiMiddleware); },
   }],

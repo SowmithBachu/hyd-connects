@@ -769,7 +769,7 @@ export function buildWorld(scene, { lite = false } = {}) {
   }
   scene.add(skyBin.build(bGeo, CLASSIC ? buildingMaterial(uNight) : blockSurface(), { castShadow: false }));
 
-  // ---- trees & Deccan boulders -------------------------------------------
+  // ---- trees & granite boulders ------------------------------------------
   const tp = new Parts();
   tp.cyl(0.14, 0.22, 1.5, '#6e5038', 0, 0, 0, 5);
   tp.geo(new THREE.IcosahedronGeometry(1, 0), '#ffffff', 0, 2.3, 0, 0, 0, 0, 1.25, 0.85, 1.25);
