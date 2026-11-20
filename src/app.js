@@ -198,7 +198,9 @@ const live = new Live({
   hello(list) {
     const ids = new Set(list.map((p) => p.id));
     for (const [id, a] of actors) if (a.p.live && !ids.has(id)) removeActor(id);
-    if (live.cred && !ids.has(live.cred.id)) { live.forget(); me = null; refreshMe(); live.connect(); gate?.show(-1); }
+    // my profile isn't on this server (right now): show me as a guest, but keep my sign-in;
+    // a server that is restarting or moving its data must never wipe people's saved logins
+    if (live.cred && !ids.has(live.cred.id) && me) { me = null; refreshMe(); }
     for (const p of list) upsert(p, false);
     afterPeopleChange();
   },
@@ -1053,7 +1055,7 @@ function frame(now) {
 // -------------------------------------------------------------------- boot
 resize(); sizeRadar(); tickTime(); renderStatus(); afterPeopleChange();
 window.addEventListener('resize', sizeRadar);
-live.connect();
+live.restore().finally(() => live.connect());
 requestAnimationFrame(frame);
 const MAIN = 'cyber'; // Cyber Towers Circle: the junction everyone gives directions from, where everyone arrives
 // Nobody walks into a half-built city: wait for the textures and the characters, put

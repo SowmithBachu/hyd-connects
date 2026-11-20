@@ -4,37 +4,26 @@
 // browser over Server-Sent Events. Only profile data and online presence are
 // shared: nobody's position or movement is synced.
 //
-// Sign-in is a placeholder: the first save returns a random token that the
-// browser keeps and sends back to edit or remove its own profile.
-import fs from 'node:fs';
-import path from 'node:path';
+// Profiles live in SQLite (server/db.js). Who is who:
+//  - registering returns a random token the browser keeps to edit or remove its profile;
+//  - the server also gives each browser a long-lived device cookie and remembers which
+//    profile that device registered. Cookies are shared by every port on a host, so the
+//    dev server, `npm start` and a restarted server all recognise a returning device;
+//  - a device registers once: registering again from it updates the same profile, and a
+//    LinkedIn or X profile can only belong to one person.
 import crypto from 'node:crypto';
 import { DISTRICTS } from '../src/geo.js';
+import { allPeople, getPerson, personOfDevice, linkDevice, savePerson, deletePerson, takenBy } from './db.js';
 
-const FILE = path.resolve('data/people.json');
 const AREAS = new Set(DISTRICTS.map((d) => d.id));
 const HAIR = new Set(['short', 'side', 'bun', 'long', 'curly', 'spiky', 'cap']);
 const OUTFIT = new Set(['tee', 'hoodie', 'shirt', 'kurta', 'suit']);
-
-let people = {};
-try { people = JSON.parse(fs.readFileSync(FILE, 'utf8')).people || {}; } catch { people = {}; }
-
-let saveTimer = null;
-function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    const tmp = FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ people }, null, 2));
-    fs.renameSync(tmp, FILE);
-  }, 150);
-}
 
 const clients = new Set();
 const online = new Map(); // person id -> open connections
 
 const view = (p) => { const { token, ...rest } = p; return { ...rest, online: online.has(p.id) }; };
-const list = () => Object.values(people).map(view);
+const list = () => allPeople().map(view);
 function broadcast(event, data) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const c of clients) c.write(msg);
@@ -88,20 +77,42 @@ function readBody(req) {
   });
 }
 const send = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
-const owns = (id, token) => typeof id === 'string' && typeof token === 'string' && people[id] &&
-  people[id].token.length === token.length && crypto.timingSafeEqual(Buffer.from(people[id].token), Buffer.from(token));
+function owns(id, token) {
+  if (typeof id !== 'string' || typeof token !== 'string') return false;
+  const p = getPerson(id);
+  return !!p && p.token.length === token.length && crypto.timingSafeEqual(Buffer.from(p.token), Buffer.from(token));
+}
+
+// this browser's device id, from its cookie (set on its first API request)
+const DEVICE = 'hc_device';
+function deviceOf(req, res) {
+  const m = /(?:^|;\s*)hc_device=([A-Za-z0-9_-]{16,64})/.exec(req.headers.cookie || '');
+  if (m) return m[1];
+  const id = crypto.randomBytes(18).toString('base64url');
+  const https = req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('set-cookie', `${DEVICE}=${id}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`);
+  return id;
+}
 
 export async function apiMiddleware(req, res, next) {
   const url = new URL(req.url, 'http://local');
   if (!url.pathname.startsWith('/api/')) return next();
   try {
+    const device = deviceOf(req, res);
     if (req.method === 'GET' && url.pathname === '/api/people') return send(res, 200, { people: list() });
+
+    // a returning device gets its sign-in back, whatever port or browser storage it lost
+    if (req.method === 'GET' && url.pathname === '/api/me') {
+      const p = personOfDevice(device);
+      return send(res, 200, p ? { id: p.id, token: p.token } : {});
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/stream') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive', 'x-accel-buffering': 'no' });
       res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ people: list() })}\n\n`);
       clients.add(res);
       const id = url.searchParams.get('id'), mine = owns(id, url.searchParams.get('token'));
+      if (mine) linkDevice(device, id); // profiles made before device cookies get linked here
       if (mine) {
         online.set(id, (online.get(id) || 0) + 1);
         if (online.get(id) === 1) broadcast('presence', { id, online: true });
@@ -109,7 +120,7 @@ export async function apiMiddleware(req, res, next) {
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
       req.on('close', () => {
         clearInterval(ping); clients.delete(res);
-        if (mine && people[id]) {
+        if (mine && getPerson(id)) {
           const n = (online.get(id) || 1) - 1;
           if (n <= 0) { online.delete(id); broadcast('presence', { id, online: false }); } else online.set(id, n);
         }
@@ -122,22 +133,31 @@ export async function apiMiddleware(req, res, next) {
       const body = await readBody(req);
       const profile = clean(body.profile);
       let { id, token } = body;
-      if (!owns(id, token)) { id = 'u-' + crypto.randomBytes(6).toString('hex'); token = crypto.randomBytes(24).toString('hex'); }
-      people[id] = { id, token, ...profile, joinedAt: people[id]?.joinedAt || Date.now(), updatedAt: Date.now() };
-      persist();
-      broadcast('upsert', view(people[id]));
-      return send(res, 200, { id, token, person: view(people[id]) });
+      if (!owns(id, token)) {
+        // one registration per device: this device's existing profile is updated instead
+        const already = personOfDevice(device);
+        if (already) ({ id, token } = already);
+        else { id = 'u-' + crypto.randomBytes(6).toString('hex'); token = crypto.randomBytes(24).toString('hex'); }
+      }
+      const clash = takenBy(profile.links, id);
+      if (clash) return send(res, 409, { error: `That ${clash} profile is already registered. If it is yours, open the city on the device you registered with.` });
+      const person = savePerson({ id, token, ...profile, joinedAt: getPerson(id)?.joinedAt });
+      linkDevice(device, id);
+      broadcast('upsert', view(person));
+      return send(res, 200, { id, token, person: view(person) });
     }
 
     if (req.method === 'DELETE' && url.pathname === '/api/profile') {
       const { id, token } = await readBody(req);
       if (!owns(id, token)) return send(res, 403, { error: 'Not your profile.' });
-      delete people[id]; online.delete(id); persist();
+      deletePerson(id); online.delete(id);
       broadcast('remove', { id });
       return send(res, 200, { ok: true });
     }
     return send(res, 404, { error: 'Not found' });
   } catch (e) {
+    if (res.headersSent) { console.error('api:', e); return res.end(); } // e.g. a live stream that already started
+    if (!/^(Name|Role|Pick|Link|LinkedIn|X link|Website|Too large|Bad JSON|Add)/.test(e.message || '')) console.error('api:', e);
     return send(res, 400, { error: e.message || 'Bad request' });
   }
 }

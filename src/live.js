@@ -20,6 +20,15 @@ export class Live {
     es.addEventListener('presence', json((d) => this.on.presence(d.id, d.online)));
     es.onerror = () => this.setConnected(false);
   }
+  // the server remembers which profile this device registered (by cookie, shared by every
+  // port on this host), so a lost or different browser storage still finds its profile
+  async restore() {
+    if (this.cred) return;
+    try {
+      const me = await fetch('/api/me', { cache: 'no-store' }).then((r) => r.json());
+      if (me.id && me.token) { this.cred = { id: me.id, token: me.token }; storeCred(this.cred); }
+    } catch { /* offline: carry on as a guest */ }
+  }
   setConnected(v) { if (v !== this.connected) { this.connected = v; this.on.status?.(v); } }
   async save(profile) {
     const res = await fetch('/api/profile', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile, ...(this.cred || {}) }) });

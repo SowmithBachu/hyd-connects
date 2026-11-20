@@ -16,11 +16,18 @@ Production: `npm run build` then `npm start` (serves `dist/` and the API on port
 
 ## Live profiles
 
-`server/api.js` keeps each visitor's public profile in `data/people.json` and
-pushes changes to every open browser over Server-Sent Events. Only profile
-details and online/offline presence are shared; nobody's position is synced.
-Sign-in is a placeholder: the browser keeps a random token that lets it edit or
-remove its own profile. Proper login and curator approval are still to come.
+`server/api.js` stores profiles in a SQLite database, `data/hyd.db` (Node's built-in
+SQLite, so Node 22.13 or newer and nothing to install; see `server/db.js`), and pushes
+changes to every open browser over Server-Sent Events. Only profile details and
+online/offline presence are shared; nobody's position is synced.
+
+Each browser gets a long-lived device cookie, and the server remembers which profile
+that device registered. Cookies are shared by every port on a host, so a returning
+visitor is recognised on the dev server, on `npm start`, after a restart, or after the
+browser's local storage is cleared. A device registers once: registering again from it
+updates the same profile, and a LinkedIn or X profile can belong to only one person.
+There is no password login yet; a person on a new device or browser is a new visitor.
+`data/` is git-ignored: back up `data/hyd.db` to keep people's profiles.
 
 Every visit opens on a landing page with **Enter the City** and **Register**.
 Anyone can walk in and roam the whole city as a guest. Meeting people needs an
