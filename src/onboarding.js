@@ -32,7 +32,7 @@ export function normaliseSite(v) {
   return /^https?:\/\//i.test(v) ? v : 'https://' + v;
 }
 
-export function createOnboarding({ archetypes, lookFor, skins, districts, statusColors, save, getMe, onEnter, onExplore, peopleCount, ready = Promise.resolve() }) {
+export function createOnboarding({ archetypes, lookFor, skins, districts, statusColors, save, getMe, onEnter, onExplore, ready = Promise.resolve() }) {
   const root = h('div'); root.id = 'gate'; root.hidden = true; // shown by show()
   document.body.append(root);
   let draft = load();
@@ -41,11 +41,15 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
   let inCity = false; // opened from inside the city: back / finish return there
   // the city loads behind the landing page; the way in opens once it is fully ready
   let loaded = false, frac = 0;
-  ready.finally(() => { loaded = true; if (!root.hidden && step < 0) render(); });
+  ready.finally(() => {
+    loaded = true; root.classList.add('live'); // the city shows through from now on
+    const b = root.querySelector('.enter.wait'); if (b) b.replaceWith(enterBtn(b._label, b._go));
+  });
   // a button that waits for the city, filling up as files arrive
   const enterBtn = (label, onGo) => {
     const b = h('button', 'btn primary big enter');
-    if (loaded) { b.textContent = label; b.onclick = onGo; return b; }
+    b._label = label; b._go = onGo;
+    if (loaded) { b.append(h('span', '', label), h('i', 'arrow', '→')); b.onclick = onGo; return b; }
     b.disabled = true; b.classList.add('wait'); b.style.setProperty('--p', frac.toFixed(3));
     b.append(h('span', '', 'Loading the city'), h('em', 'pct', Math.round(frac * 100) + '%'));
     return b;
@@ -59,30 +63,25 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
   const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* private mode */ } };
 
   // ---- landing ---------------------------------------------------------------------
+  // The name, three lines on what you can do, and one way in, over a slow flight around
+  // the live city (drawn by app.js behind this page once it has loaded).
+  const istTime = () => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date()).toUpperCase();
+  let clockTimer = 0;
   function landing() {
     const me = getMe();
     const box = h('div', 'land');
-    // kept deliberately plain: the name, one button, and how many people are in
-    const logo = h('div', 'mark big');
-    const hero = h('h1', 'hero'); hero.append('Hyderabad ', h('em', '', 'Connect'));
-    const sub = h('p', 'lead');
-    const cta = h('div', 'cta');
-    if (me) {
-      const go = enterBtn('Enter the City', () => enter(me));
-      const edit = h('button', 'btn', 'Edit my profile'); edit.onclick = () => { fromProfile(me); show(0); };
-      cta.append(go, edit);
-      sub.textContent = `Welcome back, ${me.name.split(' ')[0]}.`;
-    } else {
-      // new visitors walk straight in; registering is only needed to meet people
-      const go = enterBtn('Enter the City', () => { close(); onExplore(); });
-      const reg = h('button', 'btn big', 'Register'); reg.onclick = () => show(0);
-      cta.append(go, reg);
+    const kick = h('div', 'kick');
+    const clock = h('span', 'clock', istTime());
+    clearInterval(clockTimer); clockTimer = setInterval(() => { clock.textContent = istTime(); }, 15000);
+    kick.append(h('i', 'mark'), h('span', '', 'Madhapur, Hyderabad'), h('i', 'sep'), clock, h('span', 'ist', 'IST'));
+    const hero = h('h1', 'hero'); hero.append(h('span', 'w1', 'Hyderabad'), h('em', 'w2', 'Connect'));
+    const lines = h('ul', 'lines');
+    for (const [verb, rest] of [['Walk', 'a living 3D Madhapur, on Hyderabad time.'], ['Meet', 'the founders, designers and engineers around you.'], ['Find', 'who is hiring, and who is open to work.']]) {
+      const li = h('li'); li.append(h('b', '', verb), ' ' + rest); lines.append(li);
     }
-    const count = h('div', 'count'); count.append(h('i', 'dot live'), h('span', '', 'Loading the city…'));
-    peopleCount().then((n) => { count.lastChild.textContent = n ? `${n} ${n === 1 ? 'person' : 'people'} on the map` : 'Be one of the first on the map'; }).catch(() => { count.lastChild.textContent = 'Hyderabad · Madhapur'; });
-    box.append(logo, hero);
-    if (sub.textContent) box.append(sub);
-    box.append(cta, count);
+    const cta = h('div', 'cta');
+    cta.append(enterBtn('Enter the City', me ? () => enter(me) : () => { close(); onExplore(); }));
+    box.append(kick, hero, lines, cta);
     return box;
   }
 
@@ -223,12 +222,8 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
     } finally { busy = false; }
   }
 
-  function fromProfile(p) {
-    draft = { ...draft, name: p.name || '', role: p.role || '', student: !!p.student, company: p.student && p.company === 'Student' ? '' : p.company || '', bio: p.bio || '', skills: (p.skills || []).join(', '), status: p.status ?? null, area: p.area,
-      linkedin: p.links?.linkedin || '', x: p.links?.x || '', site: p.links?.site || p.link || '', arche: p.arche || draft.arche, skin: p.look?.skin || draft.skin };
-  }
-
   function render() {
+    root.classList.toggle('on-land', step < 0);
     root.replaceChildren(step < 0 ? landing() : wizard());
     const first = root.querySelector('input, textarea');
     if (first && step >= 0 && matchMedia('(pointer: fine)').matches) first.focus({ preventScroll: true });
@@ -238,7 +233,7 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
     if ('inCity' in opts) inCity = !!opts.inCity; else if (s < 0) inCity = false;
     step = Math.max(-1, Math.min(STEPS.length - 1, s)); root.hidden = false; document.body.classList.add('gated'); render();
   }
-  function close() { root.hidden = true; document.body.classList.remove('gated'); }
+  function close() { root.hidden = true; document.body.classList.remove('gated'); clearInterval(clockTimer); }
   function enter(person, fromCity = false) { close(); inCity = false; onEnter(person, fromCity); }
   function goBack() { if (step === 0 && inCity) { inCity = false; close(); } else show(step - 1); }
 
@@ -248,5 +243,5 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
     const b = root.querySelector('.enter.wait'); if (!b) return;
     b.style.setProperty('--p', frac.toFixed(3)); b.querySelector('.pct').textContent = Math.round(frac * 100) + '%';
   }
-  return { show, progress, get open() { return !root.hidden; }, refresh: () => { if (!root.hidden && step < 0) render(); } };
+  return { show, progress, get open() { return !root.hidden; }, get landing() { return !root.hidden && step < 0; }, refresh: () => { if (!root.hidden && step < 0) render(); } };
 }

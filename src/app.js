@@ -67,6 +67,7 @@ scene.add(fill);
 // graphics are always picked from this device's specs (and stepped down if frames run long)
 let gate = null; // landing page + registration (set up at boot, below)
 let cityWarm = false; // textures, characters and shaders are ready
+let swoop = null; // camera move from the landing page flight into the city
 let photo = null; // set up once the menus exist (below)
 try { localStorage.removeItem('deccan-commons.quality'); localStorage.removeItem('deccan-commons.look'); } catch { /* private mode */ } // old manual settings
 const post = createPost(renderer, scene, camera, sun, device.lite ? 'low' : 'high');
@@ -1048,8 +1049,23 @@ function frame(now) {
     const key = HOOD + '|' + chip;
     if (key !== whereKey) { whereKey = key; const [a, b] = key.split('|'); $('#areaName').textContent = a; $('#spot span').textContent = b; $('#spot').hidden = !b; gsap.fromTo('#areaName', { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.4 }); }
   }
-  // behind the landing page there is nothing to see once the city is ready: save the GPU (and the battery)
-  if (!(cityWarm && gate?.open)) post.render(t);
+  // the landing page floats over a slow flight around the main junction; on the way in,
+  // the camera swoops from that flight down to my shoulder
+  if (gate?.landing) {
+    const pl = world.plazas[MAIN], a = now * 0.00004 + 2.2, r = device.lite ? 70 : 82;
+    camera.position.set(pl.x + Math.cos(a) * r, 30 + Math.sin(now * 0.00011) * 4, pl.z + Math.sin(a) * r);
+    camera.lookAt(pl.x - Math.sin(a) * 18, 4, pl.z + Math.cos(a) * 18);
+    scene.fog.near = 160; scene.fog.far = 720;
+    swoop = { t0: 0, from: camera.position.clone(), q: camera.quaternion.clone() };
+  } else if (swoop) {
+    swoop.t0 ||= now;
+    const k = Math.min(1, (now - swoop.t0) / 1700), e = 1 - Math.pow(1 - k, 3);
+    camera.position.lerpVectors(swoop.from, camera.position, e);
+    camera.quaternion.slerpQuaternions(swoop.q, camera.quaternion, e);
+    if (k >= 1) swoop = null;
+  }
+  // a registration form covers everything: no need to draw the city behind it
+  if (!(cityWarm && gate?.open && !gate.landing)) post.render(t);
 }
 
 // -------------------------------------------------------------------- boot
@@ -1067,7 +1083,14 @@ const cityReady = (async () => {
   await new Promise((r) => setTimeout(r, 60)); // characters are added just after their models arrive
   const pl = world.plazas[MAIN];
   camera.position.set(pl.x + 8, 1.7, pl.z + 15.6); camera.lookAt(pl.x, 1.4, pl.z); camera.updateMatrixWorld();
-  try { await Promise.race([renderer.compileAsync(scene, camera), slow]); } catch (e) { console.warn('shader warm-up failed', e); }
+  // compile every shader the scene uses, then wait for the driver to finish linking them
+  // (three's compileAsync trips over a material disposed mid-wait, e.g. my avatar being
+  // rebuilt when the server recognises this device, and then never resolves)
+  try {
+    renderer.compile(scene, camera);
+    const until = performance.now() + 10000;
+    while (performance.now() < until && !renderer.info.programs.every((pr) => { try { return pr.isReady(); } catch { return true; } })) await new Promise((r) => setTimeout(r, 30));
+  } catch (e) { console.warn('shader warm-up failed', e); }
   post.render(0); // upload buffers and textures now, not on entry
   cityWarm = true;
 })();
@@ -1120,7 +1143,6 @@ gate = createOnboarding({
   onEnter: enterCity,
   onExplore: explore,
   ready: cityReady,
-  peopleCount: () => fetch('/api/people').then((r) => r.json()).then((d) => (d.people || []).length),
 });
 // (dev only: /?enter skips the landing page for quick testing)
 // the boot screen and the landing page share a background, so the swap is seamless
