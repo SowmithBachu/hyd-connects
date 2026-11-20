@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" class="boot">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="Hyderabad Connect" />
+  <meta name="apple-mobile-web-app-title" content="Hyderabad Connect" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Hyderabad Connect</title>
+  <meta name="description" content="A walkable 3D Hyderabad tech corridor where the city's designers, engineers and founders stand in their own neighbourhoods." />
+  <meta name="theme-color" content="#0b1a22" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23ff7a3d'/><stop offset='1' stop-color='%232ec4b6'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M8 25V11l2-4 2 4v6h8v-6l2-4 2 4v14z' fill='%230b1a22'/></svg>" />
+  <!-- first paint: the landing page's own background, never the raw page while the app loads -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b1a22; }
+    html.boot body > *:not(#loading) { visibility: hidden; }
+    #loading { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 16px; text-align: center;
+      color: #f6efe4; font-family: system-ui, sans-serif; background: radial-gradient(ellipse 80% 55% at 75% 105%, rgba(255,122,61,.38), transparent 70%), radial-gradient(ellipse 70% 60% at 10% -10%, rgba(46,196,182,.22), transparent 70%), linear-gradient(180deg, #0b1a22 0%, #10242d 55%, #1a2a33 100%); }
+    #loading .mark { width: 64px; height: 64px; border-radius: 18px; position: relative; background: linear-gradient(135deg, #ff7a3d, #2ec4b6); animation: bootPulse 1.4s ease-in-out infinite; }
+    #loading .mark::after { content: ''; position: absolute; inset: 17px 14px 13px; border-radius: 2px 2px 0 0;
+      background: linear-gradient(90deg, #0b1a22 0 8px, transparent 8px 13px, #0b1a22 13px 23px, transparent 23px 28px, #0b1a22 28px 36px); }
+    @keyframes bootPulse { 50% { opacity: 0.6; transform: scale(0.94); } }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="labels"></div>
+  <div id="vignette"></div>
+
+  <div id="hud">
+    <div id="area" class="glass">
+      <span class="compass"><i data-lucide="compass"></i></span>
+      <small>Hyderabad</small>
+      <b id="areaName">HITEC City</b>
+      <span id="spot"><i data-lucide="map-pin"></i><span>Cyber Towers</span></span>
+    </div>
+    <div id="status" class="glass"></div>
+    <div id="topRight">
+      <span id="online" class="chip glass"><i class="dot live"></i><span>0 online</span></span>
+      <span id="clock" class="chip glass" title="The city follows the time in Hyderabad"></span>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <button id="prompt" class="glass" hidden><kbd>E</kbd><span>View profile</span></button>
+  <div id="lookHint" class="glass"><i data-lucide="mouse-pointer-click"></i>Click to look around</div>
+
+  <div id="hint">
+    <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Walk · <kbd>Shift</kbd> Run</span>
+    <span><kbd>E</kbd> Meet someone nearby · <kbd>P</kbd> Photo</span>
+  </div>
+
+  <nav id="dock" class="glass">
+    <button data-act="find"><i data-lucide="search"></i>Find<kbd>F</kbd></button>
+    <button data-act="map"><i data-lucide="map"></i>Map<kbd>M</kbd></button>
+    <button data-act="join" class="primary"><i data-lucide="user-plus"></i><span>Join</span><kbd>L</kbd></button>
+    <button data-act="photo"><i data-lucide="camera"></i>Photo<kbd>P</kbd></button>
+    <button data-act="menu"><i data-lucide="menu"></i>Menu<kbd>Esc</kbd></button>
+  </nav>
+
+  <div id="mini" title="Open the city map (M)"><canvas id="map" width="196" height="196"></canvas><span class="open glass">City map</span></div>
+  <div id="stick"><i></i></div>
+
+  <div id="mapUI" hidden>
+    <div class="top glass"><i data-lucide="map"></i><div><b>City map</b><br /><span>Drag to pan · scroll to zoom · click anywhere to travel</span></div><button class="x" id="mapClose" aria-label="Close map"><i data-lucide="x"></i></button></div>
+    <div class="legend glass">
+      <div><i class="dot open"></i>Open to work</div>
+      <div><i class="dot hiring"></i>Hiring</div>
+      <div><i class="dot live"></i>Online now</div>
+      <div><i class="sq" style="background:#2f6fb5"></i>Metro Blue Line</div>
+    </div>
+  </div>
+
+  <aside id="find" class="panel right glass" hidden></aside>
+  <section id="card" class="panel glass" hidden></section>
+  <aside id="signin" class="panel left glass" hidden></aside>
+  <div id="pause" hidden></div>
+
+  <div id="loading" aria-label="Loading"><div class="mark"></div></div>
+
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>

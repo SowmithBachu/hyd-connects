@@ -1,0 +1,11 @@
+Character models, hairstyles, textures and animation clips in this folder are derived from:
+
+  Universal Base Characters (Standard)   by Quaternius   https://quaternius.com
+  Universal Animation Library (Standard) by Quaternius   https://quaternius.com
+
+Both are released under CC0 1.0 Universal (public domain dedication):
+https://creativecommons.org/publicdomain/zero/1.0/
+
+They were simplified, re-packed and re-textured by tools/characters/build.mjs and
+tools/characters/atlas.py. The clothing (hoodie, shirt, T-shirt, kurta) is generated
+in src/characters.js and is original to this project.

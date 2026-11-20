@@ -1,0 +1,5 @@
+node_modules
+dist
+data
+# raw third-party asset packs (CC0 zips, ~137 MB): only the optimised .glb files in public/ are committed
+assets/source/
