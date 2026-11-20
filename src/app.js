@@ -67,7 +67,6 @@ scene.add(fill);
 // graphics are always picked from this device's specs (and stepped down if frames run long)
 let gate = null; // landing page + registration (set up at boot, below)
 let cityWarm = false; // textures, characters and shaders are ready
-let swoop = null; // camera move from the landing page flight into the city
 let photo = null; // set up once the menus exist (below)
 try { localStorage.removeItem('deccan-commons.quality'); localStorage.removeItem('deccan-commons.look'); } catch { /* private mode */ } // old manual settings
 const post = createPost(renderer, scene, camera, sun, device.lite ? 'low' : 'high');
@@ -117,7 +116,6 @@ const clouds = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new 
 }
 
 let W = 1, H = 1;
-const STAGE_SHEET = 0.54; // share of a phone screen the profile editor takes (matches body.stage #signin in style.css)
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   renderer.setSize(W, H, false);
@@ -125,12 +123,6 @@ function resize() {
   camera.aspect = W / H;
   // portrait phones: a wider lens so the street isn't a narrow slot around your character
   camera.fov = W < H ? 72 : 60;
-  // editing my profile: frame my character in the space the editor panel leaves free
-  // (beside the panel on wide screens, above the bottom sheet on phones)
-  if (document.body.classList.contains('stage')) {
-    if (W > 760) { const right = 16 + Math.min(470, W - 32), cx = (right + W) / 2; camera.setViewOffset(W, H, -(cx - W / 2), 0, W, H); }
-    else { const free = H * (1 - STAGE_SHEET); camera.setViewOffset(W, H, 0, (H - free) / 2, W, H); }
-  } else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -193,7 +185,6 @@ const actors = new Map(); // id -> actor
 const freeSlots = [];
 let me = null; // my live profile, if signed in
 let openId = null; // whose profile card is open
-let editing = null; // draft profile while the join panel is open
 let everConnected = false;
 const live = new Live({
   hello(list) {
@@ -240,7 +231,7 @@ let pendingCard = null; // a guest asked to meet this person, then went to regis
 function upsert(p, fresh) {
   if (registering && p.name === registering && Date.now() - (p.joinedAt || 0) < 10000) return;
   if (live.cred && p.id === live.cred.id) {
-    if (!me && !moved && !editing) { const pl = world.plazas[p.area]; if (pl) { state.x = cam.tx = pl.x + 8; state.z = cam.tz = pl.z + 12; } } // start in my own neighbourhood
+    if (!me && !moved) { const pl = world.plazas[p.area]; if (pl) { state.x = cam.tx = pl.x + 8; state.z = cam.tz = pl.z + 12; } } // start in my own neighbourhood
     me = p; refreshMe(); return;
   }
   p = { ...p, live: p.live ?? !p.sample };
@@ -317,26 +308,15 @@ const meLab = el('div', 'pl me'); meLab.style.display = 'none'; labels.append(me
 const meO = { lab: meLab, shown: false };
 
 function refreshMe() {
-  if (!editing) setAvatar(me ? me.look : GHOST, !me);
+  setAvatar(me ? me.look : GHOST, !me);
   gate?.refresh();
   renderStatus();
   afterPeopleChange();
 }
 function renderStatus() {
-  const s = $('#status'); s.replaceChildren();
   if (live.connected) everConnected = true;
-  const who = el('div', 'who'), badge = el('span', 'badge' + (me ? ' live' : '')), txt = el('div');
-  badge.append(icon(me ? Radio : Footprints));
-  let title, sub;
-  if (!live.connected) { title = everConnected ? 'Offline' : 'Connecting'; sub = everConnected ? 'Reconnecting to the live map…' : 'Joining the live map…'; }
-  else if (me) { title = 'You are live'; sub = `Everyone can see you in ${districtById[me.area]?.name}`; }
-  else { title = 'Exploring as a guest'; sub = 'Register to meet people and stand in your block'; }
-  txt.append(el('b', '', title), el('span', '', sub)); who.append(badge, txt);
-  const btns = el('div', 'btns'), go = el('button', 'btn primary');
-  go.append(icon(me ? Pencil : UserPlus), document.createTextNode(me ? 'Edit profile' : 'Register'), kbd('L'));
-  go.onclick = join; btns.append(go);
-  s.append(who, btns);
-  const dj = document.querySelector('#dock [data-act="join"] span'); if (dj) dj.textContent = me ? 'Profile' : 'Join';
+  // (the top status strip was removed; the dock button says what L does)
+  const dj = document.querySelector('#dock [data-act="join"] span'); if (dj) dj.textContent = me ? 'Profile' : 'Register';
 }
 
 // ------------------------------------------------------------ movement
@@ -472,147 +452,36 @@ function renderFind(focus) {
 }
 const toggleFind = (on = find.hidden) => { find.hidden = !on; if (on) { unlock(); renderFind(true); slideIn(find); } };
 
-// ---------------------------------------------------------- join / edit
-const signin = $('#signin');
-const stage = { x: 0, z: 0, dx: 0, dz: 1 };
-function stageAt(area) {
-  const d = districtById[area] || districtById.cyber, pl = world.plazas[d.id];
-  let best = null;
-  for (let k = 0; k < 16; k++) {
-    const a = (k / 16) * Math.PI * 2, x = pl.x + Math.cos(a) * 9, z = pl.z + Math.sin(a) * 9;
-    // the camera sits between me and the centre; keep that line of sight clear
-    const clearView = [1.5, 2.5, 3.5, 4.5].every((d) => !world.grid.blocked(x - Math.cos(a) * d, z - Math.sin(a) * d) && world.grid.height(x - Math.cos(a) * d, z - Math.sin(a) * d) < 1);
-    if (!world.grid.blocked(x, z) && clearView) { best = { x, z, dx: Math.cos(a), dz: Math.sin(a) }; break; }
-  }
-  Object.assign(stage, best || { x: pl.x + 6, z: pl.z, dx: 1, dz: 0 });
-}
-function openSignin() {
+// ---------------------------------------------------------- my profile
+// Profiles are set once, at registration, and can't be changed afterwards; this is a
+// read-only look at mine, in its own window rather than on the street.
+const mine = el('div'); mine.id = 'mine'; mine.hidden = true; document.body.append(mine);
+mine.addEventListener('click', (e) => { if (e.target === mine) closeMine(); });
+function openMine() {
+  if (!me) return;
   closeCard(); find.hidden = true; unlock();
-  const base = me || {};
-  editing = {
-    arche: base.arche || 'engineer', name: base.name || '', role: base.role || '', company: base.student && base.company === 'Student' ? '' : base.company || '', area: base.area || nearestDistrict(state.x, state.z).district.id,
-    student: !!base.student, status: base.status ?? 'open', bio: base.bio || '', skills: (base.skills || []).join(', '), linkedin: base.links?.linkedin || '', x: base.links?.x || '', site: base.links?.site || base.link || '', look: base.look ? { ...base.look } : lookFor('engineer'),
-  };
-  if (!editing.role) editing.role = ARCH.find((a) => a.id === editing.arche).role;
-  stageAt(editing.area);
-  document.body.classList.add('stage'); resize();
-  setAvatar(editing.look, false);
-  renderSignin(); updateMeLab();
-  signin.hidden = false; slideIn(signin, -24);
+  const p = me, st = STATUS[p.status], d = districtById[p.area];
+  const box = el('div', 'mc glass');
+  const x = xBtn(); x.onclick = closeMine;
+  const top = el('div', 'top'), who = el('div');
+  who.append(el('small', '', 'Your profile'), el('h3', '', p.name), el('div', 'role', [p.role, p.company].filter(Boolean).join(' · ')));
+  const av = avatarDot(p); av.classList.add('big');
+  top.append(av, who);
+  const tags = el('div', 'tags');
+  if (st) tags.append(el('span', 'pill ' + p.status, st.label));
+  if (d) tags.append(el('span', 'pill area', d.name));
+  tags.append(el('span', 'pill live', '● On the map'));
+  box.append(x, top, tags);
+  if (p.bio) box.append(el('p', 'bio', p.bio));
+  if (p.skills?.length) { const sk = el('div', 'skills'); p.skills.forEach((k) => sk.append(el('span', '', k))); box.append(sk); }
+  const NAMES = { linkedin: 'LinkedIn', x: 'X', site: 'Website' };
+  const links = Object.entries(p.links || {}).filter(([, v]) => /^https?:\/\//i.test(v || ''));
+  if (links.length) { const acts = el('div', 'acts'); for (const [k, url] of links) { const a = el('a', 'btn', NAMES[k] || k); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; acts.append(a); } box.append(acts); }
+  box.append(el('p', 'fine', 'Your profile was set when you registered, so people can trust it is really you.'));
+  mine.replaceChildren(box); mine.hidden = false;
+  gsap.fromTo(box, { y: 16, opacity: 0, scale: 0.98 }, { y: 0, opacity: 1, scale: 1, duration: 0.3, ease: 'power2.out' });
 }
-function closeSignin() {
-  signin.hidden = true; editing = null;
-  document.body.classList.remove('stage'); resize();
-  state.x = stage.x; state.z = stage.z; cam.tx = state.x; cam.tz = state.z; lookAt(Math.atan2(-stage.dx, -stage.dz) + Math.PI); cam.eff = 4;
-  setAvatar(me ? me.look : GHOST, !me);
-}
-let lookTimer = 0;
-const relook = () => { clearTimeout(lookTimer); lookTimer = setTimeout(() => setAvatar(editing.look, false), 30); };
-function renderSignin() {
-  const e = editing, y = signin.querySelector('.pb')?.scrollTop || 0;
-  signin.replaceChildren();
-  const ph = el('div', 'ph'), h = el('h2', 'd');
-  h.append(me ? 'Edit your ' : 'Put yourself ', el('em', '', me ? 'profile' : 'on the map'));
-  h.append(el('span', 'sub', me ? 'Changes show up for everyone straight away.' : 'Everyone walking the city will see your character, name and status, live.'));
-  const x = xBtn(); x.onclick = closeSignin;
-  ph.append(h, x);
-  const pb = el('div', 'pb');
-  const lbl = (t) => el('label', 'lbl', t);
-  const field = (k, ph_, max, cls = 'field') => { const i = el('input', cls); i.type = 'text'; i.value = e[k]; i.placeholder = ph_; i.maxLength = max; i.oninput = () => { e[k] = i.value; if (k === 'name' || k === 'role') updateMeLab(); }; return i; };
-
-  pb.append(lbl('Pick your look'));
-  const tiles = el('div', 'tiles');
-  for (const a of ARCH) {
-    const t = el('button', 'tile' + (e.arche === a.id ? ' on' : '')); t.style.setProperty('--tb', a.bg);
-    const f = el('i', 'fig'); f.style.setProperty('--c', a.look.top); f.style.setProperty('--hc', a.look.hairColor || '#1c1717');
-    t.append(f, el('b', '', a.name));
-    t.onclick = () => { const was = ARCH.find((x) => x.id === e.arche).role; e.arche = a.id; if (!e.role || e.role === was) e.role = a.role; e.look = lookFor(a.id, e.look); relook(); renderSignin(); updateMeLab(); };
-    tiles.append(t);
-  }
-  const cur = ARCH.find((a) => a.id === e.arche), line = el('div', 'archLine', 'The ' + cur.name); line.append(el('span', '', cur.line));
-  pb.append(tiles, line);
-
-  pb.append(lbl('Full name'), field('name', 'Your real name', 48, 'field big'));
-  const two = el('div', 'two'), c1 = el('div'), c2 = el('div');
-  pb.append(lbl('Where you are'));
-  const ws = el('div', 'seg');
-  for (const [k, label] of [[false, 'Working at a company'], [true, 'Student']]) {
-    const b = el('button', e.student === k ? 'on' : '', label);
-    b.onclick = () => { e.student = k; if (k && e.company === 'Student') e.company = ''; renderSignin(); };
-    ws.append(b);
-  }
-  pb.append(ws);
-  c1.append(lbl('Role'), field('role', e.student ? 'CS student' : 'Software Engineer', 48));
-  c2.append(lbl(e.student ? 'College (optional)' : 'Company'), field('company', e.student ? 'Where you study' : 'Where you work', 48));
-  two.append(c1, c2); pb.append(two);
-
-  pb.append(lbl('Status'));
-  const st = el('div', 'seg status');
-  for (const [k, label] of [['open', 'Open to work'], ['hiring', 'Hiring'], [null, 'Just here']]) {
-    const b = el('button', (e.status === k ? 'on ' : '') + (k || ''));
-    if (k) b.append(el('i', 'dot ' + k)); b.append(label);
-    b.onclick = () => { e.status = k; renderSignin(); updateMeLab(); }; st.append(b);
-  }
-  pb.append(st);
-
-  pb.append(lbl('Your block in Madhapur'));
-  const ar = el('div', 'seg');
-  for (const d of DISTRICTS) { const b = el('button', e.area === d.id ? 'on' : '', d.name); b.onclick = () => { e.area = d.id; stageAt(d.id); renderSignin(); }; ar.append(b); }
-  pb.append(ar);
-
-  pb.append(lbl('Tagline'), field('bio', 'What are you building, or looking for?', 140));
-  pb.append(lbl('Skills'), field('skills', 'React, Figma, Go — comma separated', 90));
-  pb.append(lbl('LinkedIn'), field('linkedin', 'linkedin.com/in/your-name', 200), lbl('X (Twitter)'), field('x', '@yourhandle', 200), lbl('Website'), field('site', 'yoursite.com', 200));
-
-  const sw = (title, list, key) => {
-    const s = el('div', 'sw');
-    for (const c of list) { const b = el('button', e.look[key] === c ? 'on' : ''); b.style.background = c; b.title = title; b.onclick = () => { e.look = { ...e.look, [key]: c }; relook(); renderSignin(); }; s.append(b); }
-    pb.append(lbl(title), s);
-  };
-  sw('Skin', SKIN, 'skin');
-  const hs = el('div', 'seg'); for (const hh of HAIRSTYLES) { const b = el('button', e.look.hair === hh ? 'on' : '', hh); b.onclick = () => { e.look = { ...e.look, hair: hh }; relook(); renderSignin(); }; hs.append(b); }
-  pb.append(lbl('Hair'), hs);
-  sw('Hair colour', HAIRCOL, 'hairColor');
-  const set1 = (patch) => { e.look = { ...e.look, ...patch }; relook(); renderSignin(); };
-  const segOf = (title, opts, key) => { const g = el('div', 'seg'); for (const [k, n] of opts) { const b = el('button', (e.look[key] || opts[0][0]) === k ? 'on' : '', n); b.onclick = () => set1({ [key]: k }); g.append(b); } pb.append(lbl(title), g); };
-  segOf('Outfit', OUTFITS, 'outfit');
-  const tops = e.look.outfit === 'suit' ? SUITS : e.look.outfit === 'kurta' ? KURTAS : TOPS;
-  sw(e.look.outfit === 'suit' ? 'Suit colour' : e.look.outfit === 'kurta' ? 'Kurta colour' : 'Top colour', tops, 'top');
-  if (e.look.outfit !== 'suit' && e.look.outfit !== 'kurta') segOf('Bottoms', [['pants', 'Trousers'], ['shorts', 'Shorts']], 'legs');
-  sw('Bottoms colour', BOTTOMS, 'bottom');
-  sw(e.look.outfit === 'suit' ? 'Tie colour' : 'Accent colour', ACCENTS, 'accent');
-  const ex = el('div', 'seg'); for (const [k, n] of [['glasses', 'Glasses'], ['beard', 'Beard'], ['headphones', 'Headphones'], ['lanyard', 'ID lanyard'], ['backpack', 'Backpack']]) { const b = el('button', e.look[k] ? 'on' : '', n); b.onclick = () => { e.look = { ...e.look, [k]: !e.look[k] }; relook(); renderSignin(); }; ex.append(b); }
-  pb.append(lbl('Extras'), ex);
-  pb.append(el('div', 'note', 'Sign-in and curator approval come later. For now your profile is tied to this browser and shows to everyone on this server.'));
-
-  const pf = el('div', 'pf'), err = el('span', 'err');
-  if (me) { const leave = el('button', 'btn', 'Leave map'); leave.onclick = async () => { await live.leave(); me = null; closeSignin(); refreshMe(); gate.show(-1); }; pf.append(leave); }
-  pf.append(err);
-  const go = el('button', 'btn primary big'); go.append(me ? 'Save' : 'Go live', kbd('↵'));
-  go.onclick = async () => {
-    const profile = { name: e.name, role: e.role, student: !!e.student, company: e.company.trim() || (e.student ? 'Student' : ''), area: e.area, status: e.status, bio: e.bio, skills: e.skills.split(',').map((s) => s.trim()).filter(Boolean), links: { linkedin: normaliseLinkedIn(e.linkedin), x: normaliseX(e.x), site: normaliseSite(e.site) }, look: e.look };
-    if (profile.name.trim().length < 2) return (err.textContent = 'Add your name.');
-    if (profile.role.trim().length < 2) return (err.textContent = 'Add your role.');
-    if (!profile.student && profile.company.length < 2) return (err.textContent = 'Add your company, or pick Student.');
-    go.disabled = true; err.textContent = '';
-    try { me = { ...(await live.save(profile)), arche: e.arche }; closeSignin(); refreshMe(); }
-    catch (ex2) { err.textContent = ex2.message; go.disabled = false; }
-  };
-  pf.append(go);
-  signin.append(ph, pb, pf);
-  signin.querySelector('.pb').scrollTop = y;
-  signin.onkeydown = (ev) => { if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') go.click(); };
-}
-function updateMeLab() {
-  if (!editing) return;
-  const st = STATUS[editing.status];
-  const card = el('div', 'card'), ava = el('div', 'ava', initials(editing.name || 'You')), txt = el('div');
-  ava.style.background = `linear-gradient(135deg, ${editing.look.top}, ${editing.look.accent || '#ff7a3d'})`;
-  txt.append(el('div', 'nm', editing.name.trim() || 'Your name'), el('div', 'rl', [editing.role || 'Your role', editing.company].filter(Boolean).join(' · ')));
-  card.append(ava, txt);
-  meLab.replaceChildren(card);
-  if (st) meLab.append(el('div', 'tag ' + editing.status, st.label));
-}
+function closeMine() { mine.hidden = true; }
 
 // ------------------------------------------------- radar minimap + 3D city map
 const mini = $('#mini'), mapC = $('#map'), mctx = mapC.getContext('2d');
@@ -718,7 +587,6 @@ function renderPause() {
   L.append(el('small', 'd', `${CITY} · ${HOOD}`), el('h1', 'd', 'Paused'));
   const item = (label, k, fn, primary) => { const b = el('button', 'pzItem d' + (primary ? ' on' : '')); b.append(el('span', '', label), kbd(k)); b.onclick = fn; L.append(b); };
   item('Resume', 'Esc', () => setPause(false), true);
-  item(me ? 'Edit my profile' : 'Register to meet people', 'L', () => { setPause(false); join(); });
   const live2 = el('div', 'pzLive'); const ps = everyone(); live2.append(el('i', 'dot live'), document.createTextNode(`${ps.filter((p) => p.live && p.online).length + (me ? 1 : 0)} online · ${ps.length + (me ? 1 : 0)} ${ps.length + (me ? 1 : 0) === 1 ? 'person' : 'people'} on the map`));
   L.append(live2);
 
@@ -728,7 +596,7 @@ function renderPause() {
   const touch = matchMedia('(pointer: coarse)').matches;
   const rows = touch
     ? [['Joystick', 'Walk (push further to run)'], ['Drag', 'Look around'], ['Pinch', 'Camera closer / further'], ['Say hi', 'Tap it near someone to meet them'], ['Photo', 'Photo mode']]
-    : [['W A S D', 'Walk (or the arrow keys)'], ['Shift', 'Run'], ['Click', 'Look around (Esc to free the mouse)'], ['Wheel', 'Camera closer / further'], ['E', 'Meet someone nearby'], ['P', 'Photo mode (Space to shoot)'], ['L', me ? 'Edit my profile' : 'Register'], ['Esc', 'Pause']];
+    : [['W A S D', 'Walk (or the arrow keys)'], ['Shift', 'Run'], ['Click', 'Look around (Esc to free the mouse)'], ['Wheel', 'Camera closer / further'], ['E', 'Meet someone nearby'], ['P', 'Photo mode (Space to shoot)'], ['L', me ? 'Your profile' : 'Register'], ['Esc', 'Pause']];
   for (const [k, what] of rows) { const r = el('div'); r.append(kbd(k), el('span', '', what)); ctl.append(r); }
   Rt.append(ctl);
   box.append(L, Rt);
@@ -747,14 +615,12 @@ let near = null;
 window.addEventListener('keydown', (e) => {
   if (gate?.open) return;
   if (e.key === 'Escape' && photo.on) { photo.toggle(false); return; }
-  if (e.key === 'Escape') { if (paused) setPause(false); else if (editing) closeSignin(); else if (mapMode) setMap(false); else if (!card.hidden) closeCard(); else if (!find.hidden) find.hidden = true; else setPause(true); return; }
-  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName || '') || editing || paused) return;
-  if (mapMode && e.key.toLowerCase() !== 'm') return;
+  if (e.key === 'Escape') { if (paused) setPause(false); else if (!mine.hidden) closeMine(); else if (mapMode) setMap(false); else if (!card.hidden) closeCard(); else if (!find.hidden) find.hidden = true; else setPause(true); return; }
+  if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName || '') || paused || !mine.hidden) return;
+  if (mapMode) return;
   const k = e.key.toLowerCase();
   keys.add(k);
   if (k === 'e' && near) openCard(near.p);
-  if (k === 'f') { e.preventDefault(); toggleFind(); }
-  if (k === 'm') setMap(!mapMode);
   if (k === 'l') join();
   if (k === 'p') photo.toggle();
   if (k === ' ' && photo.on) photo.shoot();
@@ -766,7 +632,7 @@ window.addEventListener('blur', () => keys.clear());
 $('#prompt').onclick = () => near && openCard(near.p);
 $('#dock').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  ({ find: () => toggleFind(), map: () => setMap(!mapMode), join: () => join(), menu: () => setPause(true), photo: () => photo.toggle() })[b.dataset.act]?.();
+  ({ join: () => join(), menu: () => setPause(true), photo: () => photo.toggle() })[b.dataset.act]?.();
 });
 
 const ptrs = new Map();
@@ -781,7 +647,7 @@ canvas.addEventListener('click', (e) => {
     if (ray.ray.intersectPlane(ground0, hit)) { setMap(false); flyTo(hit.x, hit.z); }
     return;
   }
-  if (!downAt || downAt[2] !== 'mouse' || editing || paused || document.pointerLockElement) return;
+  if (!downAt || downAt[2] !== 'mouse' || paused || document.pointerLockElement) return;
   if (Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 8) lockPointer();
 });
 function lockPointer() {
@@ -798,7 +664,7 @@ const turn = (dx, dy, k) => {
   cam.tpitch = clamp(cam.tpitch + dy * k * 0.8 * look.sens * (look.invert ? -1 : 1), -0.38, 1.3);
 };
 document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement !== canvas || editing || paused) return;
+  if (document.pointerLockElement !== canvas || paused) return;
   if (lockFresh > 0) { lockFresh--; if (Math.abs(e.movementX) > 200 || Math.abs(e.movementY) > 200) return; }
   turn(e.movementX, e.movementY, 0.0024);
 });
@@ -808,13 +674,13 @@ document.addEventListener('pointerlockchange', () => {
   const on = document.pointerLockElement === canvas;
   if (on) lockFresh = 2;
   document.body.classList.toggle('locked', on);
-  if (!on && !quietUnlock && !editing && !paused) setPause(true); // Esc while looking opens the menu, like a game
+  if (!on && !quietUnlock && !paused) setPause(true); // Esc while looking opens the menu, like a game
   quietUnlock = false;
 });
 const hoverNdc = new THREE.Vector2(9, 9);
 canvas.addEventListener('pointermove', (e) => {
   hoverNdc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
-  const p = ptrs.get(e.pointerId); if (!p || editing || mapMode || document.pointerLockElement) return;
+  const p = ptrs.get(e.pointerId); if (!p || mapMode || document.pointerLockElement) return;
   if (ptrs.size === 1) turn(e.clientX - p[0], e.clientY - p[1], e.pointerType === 'mouse' ? 0.0042 : 0.006);
   p[0] = e.clientX; p[1] = e.clientY;
   if (ptrs.size === 2) {
@@ -825,7 +691,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 const up = (e) => { ptrs.delete(e.pointerId); pinch = 0; };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); if (!editing && !mapMode) cam.dist = clamp(cam.dist * Math.exp(e.deltaY * 0.0012), CAM_MIN, CAM_MAX); }, { passive: false });
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); if (!mapMode) cam.dist = clamp(cam.dist * Math.exp(e.deltaY * 0.0012), CAM_MIN, CAM_MAX); }, { passive: false });
 
 const stick = $('#stick'), knob = stick.firstElementChild;
 const stickMove = (e) => {
@@ -859,6 +725,8 @@ const hovered = (a) => {
 };
 function frame(now) {
   requestAnimationFrame(frame);
+  // a full-screen page (landing, registration) covers the city: once it is ready, do no work at all
+  if (cityWarm && gate?.open) { last = now; return; }
   const prev = last, dt = Math.min(0.05, (now - last) / 1000); last = now;
   const t = now / 1000;
   surfaceUniforms.uTime.value = t % 1000;
@@ -870,20 +738,11 @@ function frame(now) {
   if (now - timeT > 20000) { timeT = now; tickTime(); }
 
   let dist, running = false, moving = 0;
-  const city = !editing && !mapMode;
+  const city = !mapMode;
   if (mapMode) {
     if (mapReady) mapControls.update();
     dist = camera.position.distanceTo(mapReady ? mapControls.target : new THREE.Vector3(state.x, 0, state.z));
     aimSun(mapReady ? mapControls.target.x : state.x, mapReady ? mapControls.target.z : state.z, 260);
-  } else if (editing) {
-    // turntable: my character faces the camera while I edit
-    const f = Math.min(1, dt * 4);
-    state.x += (stage.x - state.x) * f; state.z += (stage.z - state.z) * f;
-    state.yaw = Math.atan2(-stage.dx, -stage.dz) + Math.sin(t * 0.6) * 0.45;
-    camera.position.set(state.x - stage.dx * 4.1, 1.72, state.z - stage.dz * 4.1);
-    camera.lookAt(state.x, 1.18, state.z);
-    cam.tx = state.x; cam.tz = state.z; dist = 6;
-    aimSun(state.x, state.z, 60);
   } else {
     let lift = 0;
     if (fly) {
@@ -1049,23 +908,8 @@ function frame(now) {
     const key = HOOD + '|' + chip;
     if (key !== whereKey) { whereKey = key; const [a, b] = key.split('|'); $('#areaName').textContent = a; $('#spot span').textContent = b; $('#spot').hidden = !b; gsap.fromTo('#areaName', { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.4 }); }
   }
-  // the landing page floats over a slow flight around the main junction; on the way in,
-  // the camera swoops from that flight down to my shoulder
-  if (gate?.landing) {
-    const pl = world.plazas[MAIN], a = now * 0.00004 + 2.2, r = device.lite ? 70 : 82;
-    camera.position.set(pl.x + Math.cos(a) * r, 30 + Math.sin(now * 0.00011) * 4, pl.z + Math.sin(a) * r);
-    camera.lookAt(pl.x - Math.sin(a) * 18, 4, pl.z + Math.cos(a) * 18);
-    scene.fog.near = 160; scene.fog.far = 720;
-    swoop = { t0: 0, from: camera.position.clone(), q: camera.quaternion.clone() };
-  } else if (swoop) {
-    swoop.t0 ||= now;
-    const k = Math.min(1, (now - swoop.t0) / 1700), e = 1 - Math.pow(1 - k, 3);
-    camera.position.lerpVectors(swoop.from, camera.position, e);
-    camera.quaternion.slerpQuaternions(swoop.q, camera.quaternion, e);
-    if (k >= 1) swoop = null;
-  }
-  // a registration form covers everything: no need to draw the city behind it
-  if (!(cityWarm && gate?.open && !gate.landing)) post.render(t);
+  // the landing page and the registration form cover everything: draw nothing behind them
+  if (!gate?.open) post.render(t);
 }
 
 // -------------------------------------------------------------------- boot
@@ -1097,7 +941,7 @@ const cityReady = (async () => {
 
 // landing page and registration. Anyone can walk in as a guest; meeting people
 // (profiles, links, the guide) needs registering, which guests can do from inside.
-const showHud = () => gsap.from(['#area', '#status', '#topRight > *', '#dock', '#mini'], { y: -16, opacity: 0, duration: 0.6, stagger: 0.07, delay: 0.1, ease: 'power3.out', clearProps: 'all' });
+const showHud = () => gsap.from(['#area', '#topRight > *', '#dock', '#mini'], { y: -16, opacity: 0, duration: 0.6, stagger: 0.07, delay: 0.1, ease: 'power3.out', clearProps: 'all' });
 // arrive facing the plaza, with nothing (a wall, a lamp post, a tree) between the camera and me
 function standAt(area) {
   const pl = world.plazas[area]; if (!pl) return;
@@ -1125,7 +969,7 @@ function enterCity(person, fromCity = false) {
   if (p && fromCity) openCard(p);
 }
 function join() {
-  if (me) return openSignin(); // registered: edit in the city
+  if (me) return openMine(); // registered: a read-only look (profiles are final)
   closeCard(); find.hidden = true; unlock();
   gate.show(0, { inCity: true });
 }
@@ -1150,4 +994,4 @@ const unboot = () => { document.documentElement.classList.remove('boot'); $('#lo
 if (!(import.meta.env.DEV && location.search.includes('enter'))) { gate.show(-1); unboot(); }
 else cityReady.then(unboot);
 if (import.meta.env.DEV) import('./dev/perf.js').then(({ installPerf }) => installPerf({ renderer, scene, sun, frame }));
-if (import.meta.env.DEV) window.__dc = { state, cam, world, flyTo, stage, camera, scene, actors, walkers, crowd, post, sun, QUALITY, device, setAutoQ: (v) => { autoQ = v; }, get fps() { return Math.round(1000 / ema); }, renderer }; // dev-only debug handle
+if (import.meta.env.DEV) window.__dc = { state, cam, world, flyTo, camera, scene, actors, walkers, crowd, post, sun, QUALITY, device, applyTime, setAutoQ: (v) => { autoQ = v; }, get fps() { return Math.round(1000 / ema); }, renderer }; // dev-only debug handle

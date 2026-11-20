@@ -24,25 +24,26 @@ online/offline presence are shared; nobody's position is synced.
 Each browser gets a long-lived device cookie, and the server remembers which profile
 that device registered. Cookies are shared by every port on a host, so a returning
 visitor is recognised on the dev server, on `npm start`, after a restart, or after the
-browser's local storage is cleared. A device registers once: registering again from it
-updates the same profile, and a LinkedIn or X profile can belong to only one person.
+browser's local storage is cleared. A device registers once, a profile is final once made
+(it cannot be edited), and a LinkedIn or X profile can belong to only one person.
 There is no password login yet; a person on a new device or browser is a new visitor.
 `data/` is git-ignored: back up `data/hyd.db` to keep people's profiles.
 
-Every visit opens on a landing page over a slow flight around the live city: the name,
-three lines on what you can do, and one button, **Enter the City**.
+Every visit opens on a static landing page (a still of the city, `public/landing/`):
+the name, Walk · Meet · Find, one line, and one button, **Enter the City**. Nothing 3D is
+drawn while it shows.
 Anyone can walk in and roam the whole city as a guest. Meeting people needs an
 account: a guest who presses E near someone sees their name and role and a
 **Register** button, but not their profile, links or the guide.
 
-**Register** (from the landing page, the dock, L, or someone's card) is five short
+**Register** (from the dock, L, or someone's card) is five short
 steps: who you are (name, role, and company, or Student with an optional college;
 plus an optional one-line description); what you do (skills, open to work / hiring);
 your block; your links (LinkedIn, X or a website, all optional); your character.
 Only name, role and company (or Student) are required. Everyone enters at Cyber Towers Circle, the main
 junction (your character stands in your block for others); finishing from inside the city keeps you where you were and opens
-the card of the person you wanted to meet. A returning visitor enters as themselves; profiles are edited
-inside the city (L or the Profile button). The flow lives in `src/onboarding.js`; an unfinished registration is
+the card of the person you wanted to meet. A returning visitor enters as themselves. Profiles
+are final: L or the Profile button shows yours, read-only. The flow lives in `src/onboarding.js`; an unfinished registration is
 kept in the browser so a reload doesn't lose it.
 
 Only people who have registered appear in the city; there are no built-in or

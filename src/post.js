@@ -124,8 +124,9 @@ export function createPost(renderer, scene, camera, sun, initial = 'high') {
     if (f.shadow) g.uShadow.value.set(...f.shadow);
     if (f.grain != null) g.uGrain.value = f.grain;
   }
+  // a live getter (Object.assign would copy the starting value once and never update it)
+  Object.defineProperty(api, 'level', { get: () => level, enumerable: true });
   return Object.assign(api, {
-    get level() { return level; },
     setLevel(l) { if (QUALITY[l] && l !== level) { level = l; build(); } },
     setSize(W, H) { w = Math.max(1, W); h = Math.max(1, H); if (!built) build(); else if (composer) { composer.setSize(w, h); sizeAA(); } },
     setNight,

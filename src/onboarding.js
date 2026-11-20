@@ -42,7 +42,7 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
   // the city loads behind the landing page; the way in opens once it is fully ready
   let loaded = false, frac = 0;
   ready.finally(() => {
-    loaded = true; root.classList.add('live'); // the city shows through from now on
+    loaded = true;
     const b = root.querySelector('.enter.wait'); if (b) b.replaceWith(enterBtn(b._label, b._go));
   });
   // a button that waits for the city, filling up as files arrive
@@ -63,25 +63,17 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
   const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { /* private mode */ } };
 
   // ---- landing ---------------------------------------------------------------------
-  // The name, three lines on what you can do, and one way in, over a slow flight around
-  // the live city (drawn by app.js behind this page once it has loaded).
-  const istTime = () => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date()).toUpperCase();
-  let clockTimer = 0;
+  // A still picture of the city, the name, three words and one line, and one way in.
   function landing() {
     const me = getMe();
     const box = h('div', 'land');
-    const kick = h('div', 'kick');
-    const clock = h('span', 'clock', istTime());
-    clearInterval(clockTimer); clockTimer = setInterval(() => { clock.textContent = istTime(); }, 15000);
-    kick.append(h('i', 'mark'), h('span', '', 'Madhapur, Hyderabad'), h('i', 'sep'), clock, h('span', 'ist', 'IST'));
     const hero = h('h1', 'hero'); hero.append(h('span', 'w1', 'Hyderabad'), h('em', 'w2', 'Connect'));
-    const lines = h('ul', 'lines');
-    for (const [verb, rest] of [['Walk', 'a living 3D Madhapur, on Hyderabad time.'], ['Meet', 'the founders, designers and engineers around you.'], ['Find', 'who is hiring, and who is open to work.']]) {
-      const li = h('li'); li.append(h('b', '', verb), ' ' + rest); lines.append(li);
-    }
+    const words = h('div', 'words');
+    ['Walk', 'Meet', 'Find'].forEach((w, i) => { if (i) words.append(h('i', 'dot')); words.append(h('b', '', w)); });
+    const tag = h('p', 'tag', 'Meet and greet the people building Hyderabad, one street at a time.');
     const cta = h('div', 'cta');
     cta.append(enterBtn('Enter the City', me ? () => enter(me) : () => { close(); onExplore(); }));
-    box.append(kick, hero, lines, cta);
+    box.append(hero, words, tag, cta);
     return box;
   }
 
@@ -233,7 +225,7 @@ export function createOnboarding({ archetypes, lookFor, skins, districts, status
     if ('inCity' in opts) inCity = !!opts.inCity; else if (s < 0) inCity = false;
     step = Math.max(-1, Math.min(STEPS.length - 1, s)); root.hidden = false; document.body.classList.add('gated'); render();
   }
-  function close() { root.hidden = true; document.body.classList.remove('gated'); clearInterval(clockTimer); }
+  function close() { root.hidden = true; document.body.classList.remove('gated'); }
   function enter(person, fromCity = false) { close(); inCity = false; onEnter(person, fromCity); }
   function goBack() { if (step === 0 && inCity) { inCity = false; close(); } else show(step - 1); }
 

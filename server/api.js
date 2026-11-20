@@ -9,8 +9,8 @@
 //  - the server also gives each browser a long-lived device cookie and remembers which
 //    profile that device registered. Cookies are shared by every port on a host, so the
 //    dev server, `npm start` and a restarted server all recognise a returning device;
-//  - a device registers once: registering again from it updates the same profile, and a
-//    LinkedIn or X profile can only belong to one person.
+//  - a device registers once, and a profile is final once made (it cannot be edited);
+//    a LinkedIn or X profile can only belong to one person.
 import crypto from 'node:crypto';
 import { DISTRICTS } from '../src/geo.js';
 import { allPeople, getPerson, personOfDevice, linkDevice, savePerson, deletePerson, takenBy } from './db.js';
@@ -132,13 +132,9 @@ export async function apiMiddleware(req, res, next) {
       if (limited(req.socket.remoteAddress)) return send(res, 429, { error: 'Too many changes. Try again in a minute.' });
       const body = await readBody(req);
       const profile = clean(body.profile);
-      let { id, token } = body;
-      if (!owns(id, token)) {
-        // one registration per device: this device's existing profile is updated instead
-        const already = personOfDevice(device);
-        if (already) ({ id, token } = already);
-        else { id = 'u-' + crypto.randomBytes(6).toString('hex'); token = crypto.randomBytes(24).toString('hex'); }
-      }
+      // profiles are final: registering creates one, and nothing can change it afterwards
+      if (owns(body.id, body.token) || personOfDevice(device)) return send(res, 409, { error: 'You have already registered on this device, and profiles cannot be changed once made.' });
+      const id = 'u-' + crypto.randomBytes(6).toString('hex'), token = crypto.randomBytes(24).toString('hex');
       const clash = takenBy(profile.links, id);
       if (clash) return send(res, 409, { error: `That ${clash} profile is already registered. If it is yours, open the city on the device you registered with.` });
       const person = savePerson({ id, token, ...profile, joinedAt: getPerson(id)?.joinedAt });

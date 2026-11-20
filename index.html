@@ -10,6 +10,8 @@
   <title>Hyderabad Connect</title>
   <meta name="description" content="A walkable 3D Hyderabad tech corridor where the city's designers, engineers and founders stand in their own neighbourhoods." />
   <meta name="theme-color" content="#0b1a22" />
+  <link rel="preload" as="image" href="/landing/city-wide.webp" media="(min-width: 761px)" />
+  <link rel="preload" as="image" href="/landing/city-tall.webp" media="(max-width: 760px)" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23ff7a3d'/><stop offset='1' stop-color='%232ec4b6'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M8 25V11l2-4 2 4v6h8v-6l2-4 2 4v14z' fill='%230b1a22'/></svg>" />
   <!-- first paint: the landing page's own background, never the raw page while the app loads -->
   <style>
@@ -35,7 +37,6 @@
       <b id="areaName">HITEC City</b>
       <span id="spot"><i data-lucide="map-pin"></i><span>Cyber Towers</span></span>
     </div>
-    <div id="status" class="glass"></div>
     <div id="topRight">
       <span id="online" class="chip glass"><i class="dot live"></i><span>0 online</span></span>
       <span id="clock" class="chip glass" title="The city follows the time in Hyderabad"></span>
@@ -52,8 +53,6 @@
   </div>
 
   <nav id="dock" class="glass">
-    <button data-act="find"><i data-lucide="search"></i>Find<kbd>F</kbd></button>
-    <button data-act="map"><i data-lucide="map"></i>Map<kbd>M</kbd></button>
     <button data-act="join" class="primary"><i data-lucide="user-plus"></i><span>Join</span><kbd>L</kbd></button>
     <button data-act="photo"><i data-lucide="camera"></i>Photo<kbd>P</kbd></button>
     <button data-act="menu"><i data-lucide="menu"></i>Menu<kbd>Esc</kbd></button>
@@ -74,7 +73,6 @@
 
   <aside id="find" class="panel right glass" hidden></aside>
   <section id="card" class="panel glass" hidden></section>
-  <aside id="signin" class="panel left glass" hidden></aside>
   <div id="pause" hidden></div>
 
   <div id="loading" aria-label="Loading"><div class="mark"></div></div>
