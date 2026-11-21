@@ -291,7 +291,7 @@ const ARCH = [
   { id: 'designer', name: 'Designer', line: 'Pushes pixels until they behave.', role: 'Product Designer', look: { outfit: 'tee', top: '#e2574c', hair: 'bun', glasses: true, accent: '#ffb81c' }, bg: '#5a2b3a' },
   { id: 'engineer', name: 'Engineer', line: 'Ships at 2 a.m., fixes at 9.', role: 'Software Engineer', look: { outfit: 'hoodie', top: '#2aa6b8', hair: 'short', headphones: true, lanyard: true, accent: '#ffb81c' }, bg: '#1f4a55' },
   { id: 'founder', name: 'Founder', line: 'Pitching, even in the lift.', role: 'Founder', look: { outfit: 'shirt', top: '#f4f1e6', hair: 'side', accent: '#2f6fb5' }, bg: '#2a3350' },
-  { id: 'product', name: 'Product', line: 'Has a doc for that.', role: 'Product Manager', look: { outfit: 'kurta', top: '#e8c76a', hair: 'long', accent: '#b5523a' }, bg: '#5a4a1f' },
+  { id: 'product', name: 'Product', line: 'Has a doc for that.', role: 'Product Manager', look: { outfit: 'shirt', top: '#e8c76a', hair: 'long', accent: '#b5523a' }, bg: '#5a4a1f' },
   { id: 'data', name: 'Data & AI', line: 'Trusts the eval, not the vibe.', role: 'ML Engineer', look: { outfit: 'shirt', top: '#3f6f8a', hair: 'short', glasses: true, beard: true, lanyard: true, accent: '#f4f1e6' }, bg: '#1f3a4a' },
   { id: 'maker', name: 'Maker', line: 'Solders first, reads later.', role: 'Hardware Engineer', look: { outfit: 'tee', top: '#3d7d5a', hair: 'cap', backpack: true, legs: 'shorts', accent: '#e8891a' }, bg: '#24452f' },
   { id: 'student', name: 'Student', line: 'Here for the hackathon biryani.', role: 'Student Developer', look: { outfit: 'hoodie', top: '#f2c230', hair: 'curly', backpack: true, accent: '#2aa6b8' }, bg: '#4a4538' },
@@ -1073,9 +1073,8 @@ gate = createOnboarding({
   archetypes: ARCH, lookFor, skins: SKIN, looks: {
     // only styles the character models really draw differently, per body
     hairs: { female: [['long', 'Long'], ['side', 'Parted'], ['bun', 'Buns'], ['short', 'Short']], male: [['short', 'Parted'], ['curly', 'Buzzed'], ['long', 'Long']] },
-    outfits: [['tee', 'T-shirt'], ['hoodie', 'Hoodie'], ['shirt', 'Shirt'], ['kurta', 'Kurta']],
+    outfits: [['tee', 'T-shirt'], ['hoodie', 'Hoodie'], ['shirt', 'Shirt']],
     hairColors: HAIRCOL, tops: TOPS.filter((c) => c !== '#8a5bd1'), bottoms: BOTTOMS,
-    shoes: ['#f4f1ea', '#2b2b30', '#7a4b2a', '#3a5a8a', '#c94f3d', '#e8891a', '#1fa971', '#d9488f'],
   }, districts: DISTRICTS, statusColors: { open: STATUS.open.color, hiring: STATUS.hiring.color },
   getMe: () => me,
   save: async (profile, arche) => {

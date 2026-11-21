@@ -181,7 +181,7 @@ export function createOnboarding({ archetypes, lookFor, skins, looks, districts,
       bodySeg.append(b);
     }
     const tabs = h('div', 'ctabs');
-    for (const [v, label] of [['look', 'Look'], ['hair', 'Hair'], ['top', 'Top'], ['bottom', 'Bottom'], ['shoes', 'Shoes'], ['skin', 'Skin']]) {
+    for (const [v, label] of [['look', 'Look'], ['hair', 'Hair'], ['top', 'Top'], ['bottom', 'Bottom'], ['skin', 'Skin']]) {
       const b = h('button', tab === v ? 'on' : '', label); b.type = 'button'; b.onclick = () => { st.ctab = v; changed(); }; tabs.append(b);
     }
     const pane = h('div', 'cpane');
@@ -203,7 +203,6 @@ export function createOnboarding({ archetypes, lookFor, skins, looks, districts,
       for (const [v, label] of looks.outfits) g.append(tile(label, { ...L, outfit: v }, 'bust', L.outfit === v, () => set({ outfit: v })));
       pane.append(lbl('Style'), g, lbl('Colour'), swatches(looks.tops, 'top', 'Top colour'));
     } else if (tab === 'bottom') pane.append(lbl('Colour'), swatches(looks.bottoms, 'bottom', 'Bottoms colour'));
-    else if (tab === 'shoes') pane.append(lbl('Colour'), swatches(looks.shoes, 'shoes', 'Shoe colour'));
     else pane.append(lbl('Skin tone'), swatches(skins, 'skin', 'Skin tone'));
 
     const stage = h('div', 'pvw'); stage.append(preview.canvas, h('span', 'pvh', 'Drag to turn'));

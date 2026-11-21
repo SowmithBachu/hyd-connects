@@ -40,7 +40,7 @@ account: a guest who presses E near someone sees their name and role and a
 (name, role, and company, or Student with their college, plus an optional one-line
 description); what you do (skills, open to work / hiring); your links (LinkedIn, X or a
 website, all optional); and **Edit your character**: woman or man, a starting look, then
-hair, top, bottom, shoes and skin, with tiles drawn from the real characters and a live
+hair, top, bottom and skin, with tiles drawn from the real characters and a live
 3D preview that turns as you choose. Inside the city, the **Character** button in the dock (or C,
 or the menu) opens the same editor any time; your details stay as registered. Name, role and company (or college, for
 students) are required and marked in red. Everyone enters at Cyber Towers Circle, the main
